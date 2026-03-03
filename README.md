@@ -1,16 +1,16 @@
-<p align="center">
-  <h1 align="center">cloud-audit</h1>
-  <p align="center">
-    <strong>Fast, opinionated AWS security scanner. Curated checks. Zero noise. Copy-paste fixes.</strong>
-  </p>
-  <p align="center">
-    <a href="https://pypi.org/project/cloud-audit/"><img src="https://img.shields.io/pypi/v/cloud-audit?color=blue" alt="PyPI version"></a>
-    <a href="https://pypi.org/project/cloud-audit/"><img src="https://img.shields.io/pypi/pyversions/cloud-audit" alt="Python versions"></a>
-    <a href="https://github.com/gebalamariusz/cloud-audit/actions/workflows/ci.yml"><img src="https://github.com/gebalamariusz/cloud-audit/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-    <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
-    <a href="https://pypi.org/project/cloud-audit/"><img src="https://img.shields.io/pypi/dm/cloud-audit" alt="Downloads"></a>
-  </p>
-</p>
+<div align="center">
+
+# cloud-audit
+
+**Fast, opinionated AWS security scanner. Curated checks. Zero noise. Copy-paste fixes.**
+
+[![PyPI version](https://img.shields.io/pypi/v/cloud-audit?color=blue)](https://pypi.org/project/cloud-audit/)
+[![Python versions](https://img.shields.io/pypi/pyversions/cloud-audit)](https://pypi.org/project/cloud-audit/)
+[![CI](https://github.com/gebalamariusz/cloud-audit/actions/workflows/ci.yml/badge.svg)](https://github.com/gebalamariusz/cloud-audit/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Downloads](https://img.shields.io/pypi/dm/cloud-audit)](https://pypi.org/project/cloud-audit/)
+
+</div>
 
 ---
 
@@ -138,11 +138,20 @@ cloud-audit scan --regions all
 # Filter by category
 cloud-audit scan --categories security,cost
 
+# Show remediation details (CLI commands, Terraform, docs)
+cloud-audit scan -R
+
+# Export all fix commands as a dry-run bash script
+cloud-audit scan --export-fixes fixes.sh
+
 # Generate HTML report
 cloud-audit scan --output report.html
 
 # Generate JSON report (for CI/CD pipelines)
 cloud-audit scan --output report.json
+
+# Combine: remediation + HTML report
+cloud-audit scan -R --output report.html
 
 # Show version
 cloud-audit version
@@ -187,7 +196,7 @@ A score of **80+** is good, **50-79** needs attention, and **below 50** requires
 | Scan time | ~12 seconds | 1-4 hours | 30-60 minutes |
 | Setup | `pip install` | `pip install` + config | `pip install` + config |
 | Alert fatigue | Zero — every finding matters | High — hundreds of findings | Moderate |
-| Remediation | Copy-paste CLI + Terraform (roadmap) | Text descriptions | None |
+| Remediation | Copy-paste CLI + Terraform | Text descriptions | None |
 | HTML report | Dark-mode, client-ready | Functional | Interactive |
 | Maintenance | Active | Active | Inactive (12+ months) |
 
@@ -214,13 +223,12 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed contribution guidelines.
 
 ## Roadmap
 
-- **v0.2.0** — Remediation engine (CLI + Terraform fix for every finding) + CIS Benchmark mapping
+- ~~**v0.1.0** — 17 AWS checks, CLI, HTML/JSON reports~~
+- ~~**v0.2.0** — Remediation engine (CLI + Terraform), CIS Benchmark mapping, 45 moto tests~~
 - **v0.3.0** — CloudTrail, GuardDuty, Config, KMS, CloudWatch checks
 - **v0.4.0** — Lambda, ECS, SSM, Secrets Manager checks + IAM/EC2/S3 expansions
 - **v0.5.0** — SARIF output (GitHub Security integration), config file, baseline/suppress, cross-account scanning
 - **v1.0.0** — Executive-ready reports, scan diff/compare, documentation site
-
-See [ROADMAP.md](ROADMAP.md) for the full plan.
 
 ## License
 
