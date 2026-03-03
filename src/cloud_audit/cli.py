@@ -1,9 +1,7 @@
 """CLI interface for cloud-audit."""
 
-from __future__ import annotations
-
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -11,10 +9,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from cloud_audit import __version__
-from cloud_audit.models import Severity
-
-if TYPE_CHECKING:
-    from cloud_audit.models import Finding, ScanReport
+from cloud_audit.models import Finding, ScanReport, Severity
 
 app = typer.Typer(
     name="cloud-audit",
