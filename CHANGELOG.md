@@ -11,14 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Structured remediation for all 17 checks — every finding includes:
+- Structured remediation for all 17 checks - every finding includes:
   - Copy-paste AWS CLI command with real resource IDs
   - Terraform HCL snippet
   - AWS documentation link
   - Estimated effort level (LOW / MEDIUM / HIGH)
 - CIS AWS Foundations Benchmark mapping (10 controls covered)
-- `--remediation` / `-R` CLI flag — print fix details after scan summary
-- `--export-fixes <path>` CLI flag — export all CLI commands as a dry-run bash script
+- `--remediation` / `-R` CLI flag - print fix details after scan summary
+- `--export-fixes <path>` CLI flag - export all CLI commands as a dry-run bash script
 - HTML report enhancements:
   - Expandable "How to fix" panel per finding with CLI and Terraform snippets
   - Copy-to-clipboard button for commands

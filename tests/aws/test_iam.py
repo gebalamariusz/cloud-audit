@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 def test_root_mfa_pass(mock_aws_provider: AWSProvider) -> None:
-    """Root MFA enabled — no findings."""
+    """Root MFA enabled - no findings."""
     # moto's default account has MFA disabled, so this will produce a finding
     # We test that the check runs without errors and returns a result
     result = check_root_mfa(mock_aws_provider)
@@ -26,7 +26,7 @@ def test_root_mfa_pass(mock_aws_provider: AWSProvider) -> None:
 
 
 def test_root_mfa_fail(mock_aws_provider: AWSProvider) -> None:
-    """Root MFA disabled — should produce CRITICAL finding."""
+    """Root MFA disabled - should produce CRITICAL finding."""
     result = check_root_mfa(mock_aws_provider)
     # moto's default: root MFA is disabled
     assert len(result.findings) == 1
@@ -38,7 +38,7 @@ def test_root_mfa_fail(mock_aws_provider: AWSProvider) -> None:
 
 
 def test_users_mfa_pass(mock_aws_provider: AWSProvider) -> None:
-    """User without console access — no MFA required."""
+    """User without console access - no MFA required."""
     iam = mock_aws_provider.session.client("iam")
     iam.create_user(UserName="api-user")
     # No login profile = no console access = no MFA needed
@@ -48,7 +48,7 @@ def test_users_mfa_pass(mock_aws_provider: AWSProvider) -> None:
 
 
 def test_users_mfa_fail(mock_aws_provider: AWSProvider) -> None:
-    """User with console access but no MFA — HIGH finding."""
+    """User with console access but no MFA - HIGH finding."""
     iam = mock_aws_provider.session.client("iam")
     iam.create_user(UserName="console-user")
     iam.create_login_profile(UserName="console-user", Password="Test1234!@#$")  # noqa: S106
@@ -62,7 +62,7 @@ def test_users_mfa_fail(mock_aws_provider: AWSProvider) -> None:
 
 
 def test_access_keys_rotation_pass(mock_aws_provider: AWSProvider) -> None:
-    """Fresh access key — no finding."""
+    """Fresh access key - no finding."""
     iam = mock_aws_provider.session.client("iam")
     iam.create_user(UserName="fresh-key-user")
     iam.create_access_key(UserName="fresh-key-user")
@@ -72,7 +72,7 @@ def test_access_keys_rotation_pass(mock_aws_provider: AWSProvider) -> None:
 
 
 def test_unused_access_keys_fail(mock_aws_provider: AWSProvider) -> None:
-    """Access key never used — MEDIUM finding."""
+    """Access key never used - MEDIUM finding."""
     iam = mock_aws_provider.session.client("iam")
     iam.create_user(UserName="unused-key-user")
     iam.create_access_key(UserName="unused-key-user")

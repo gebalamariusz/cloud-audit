@@ -17,7 +17,7 @@ _CHECK_MODULES = [iam, s3, ec2, vpc, eip, rds]
 
 
 class AWSProvider(BaseProvider):
-    """AWS cloud provider — uses boto3 to scan resources."""
+    """AWS cloud provider - uses boto3 to scan resources."""
 
     def __init__(self, profile: str | None = None, regions: list[str] | None = None) -> None:
         self._session = boto3.Session(profile_name=profile)

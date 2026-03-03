@@ -192,7 +192,7 @@ def check_vpc_flow_logs(provider: AWSProvider) -> CheckResult:
             vpcs = ec2.describe_vpcs()["Vpcs"]
 
             for vpc in vpcs:
-                # Skip default VPC — it's a leftover, not user-managed infrastructure
+                # Skip default VPC - it's a leftover, not user-managed infrastructure
                 if vpc.get("IsDefault", False):
                     continue
 

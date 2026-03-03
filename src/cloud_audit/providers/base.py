@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 # A check is a callable that returns a CheckResult
-CheckFn = Any  # Callable[[], CheckResult] — simplified for Python 3.10 compat
+CheckFn = Any  # Callable[[], CheckResult] - simplified for Python 3.10 compat
 
 
 class BaseProvider(ABC):
@@ -21,7 +21,7 @@ class BaseProvider(ABC):
         """Return list of check functions to execute.
 
         Args:
-            categories: Optional filter — only return checks for these categories.
+            categories: Optional filter - only return checks for these categories.
         """
 
     @abstractmethod

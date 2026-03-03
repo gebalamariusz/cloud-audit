@@ -78,14 +78,14 @@ def test_print_remediation_shows_output(capsys: object) -> None:
 
 
 def test_print_remediation_skips_no_remediation() -> None:
-    """No remediation findings — nothing printed."""
+    """No remediation findings - nothing printed."""
     finding = _make_finding(with_remediation=False)
     # Should not raise
     _print_remediation([finding])
 
 
 def test_print_remediation_empty_list() -> None:
-    """Empty findings list — nothing printed."""
+    """Empty findings list - nothing printed."""
     _print_remediation([])
 
 
@@ -131,7 +131,7 @@ def test_export_fixes_multiple_findings(tmp_path: Path) -> None:
 
 
 def test_export_fixes_no_actionable(tmp_path: Path) -> None:
-    """No remediation findings — no file created."""
+    """No remediation findings - no file created."""
     finding = _make_finding(with_remediation=False)
     output_path = tmp_path / "fixes.sh"
 
@@ -141,7 +141,7 @@ def test_export_fixes_no_actionable(tmp_path: Path) -> None:
 
 
 def test_export_fixes_empty_findings(tmp_path: Path) -> None:
-    """Empty findings list — no file created."""
+    """Empty findings list - no file created."""
     output_path = tmp_path / "fixes.sh"
 
     _export_fixes([], output_path)

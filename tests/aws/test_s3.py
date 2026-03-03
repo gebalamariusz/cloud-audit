@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 
 def test_public_buckets_pass(mock_aws_provider: AWSProvider) -> None:
-    """Bucket with full public access block — no findings."""
+    """Bucket with full public access block - no findings."""
     s3 = mock_aws_provider.session.client("s3")
     s3.create_bucket(
         Bucket="secure-bucket",
@@ -37,7 +37,7 @@ def test_public_buckets_pass(mock_aws_provider: AWSProvider) -> None:
 
 
 def test_public_buckets_fail(mock_aws_provider: AWSProvider) -> None:
-    """Bucket without public access block — HIGH finding."""
+    """Bucket without public access block - HIGH finding."""
     s3 = mock_aws_provider.session.client("s3")
     s3.create_bucket(
         Bucket="open-bucket",
@@ -54,7 +54,7 @@ def test_public_buckets_fail(mock_aws_provider: AWSProvider) -> None:
 
 
 def test_bucket_encryption_pass(mock_aws_provider: AWSProvider) -> None:
-    """Bucket with encryption — no finding."""
+    """Bucket with encryption - no finding."""
     s3 = mock_aws_provider.session.client("s3")
     s3.create_bucket(
         Bucket="encrypted-bucket",
@@ -72,7 +72,7 @@ def test_bucket_encryption_pass(mock_aws_provider: AWSProvider) -> None:
 
 
 def test_bucket_versioning_pass(mock_aws_provider: AWSProvider) -> None:
-    """Bucket with versioning — no finding."""
+    """Bucket with versioning - no finding."""
     s3 = mock_aws_provider.session.client("s3")
     s3.create_bucket(
         Bucket="versioned-bucket",
@@ -88,7 +88,7 @@ def test_bucket_versioning_pass(mock_aws_provider: AWSProvider) -> None:
 
 
 def test_bucket_versioning_fail(mock_aws_provider: AWSProvider) -> None:
-    """Bucket without versioning — LOW finding."""
+    """Bucket without versioning - LOW finding."""
     s3 = mock_aws_provider.session.client("s3")
     s3.create_bucket(
         Bucket="unversioned-bucket",

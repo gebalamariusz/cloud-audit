@@ -70,9 +70,9 @@ def check_users_mfa(provider: AWSProvider) -> CheckResult:
                 try:
                     iam.get_login_profile(UserName=username)
                 except iam.exceptions.NoSuchEntityException:
-                    continue  # No console access — MFA not required
+                    continue  # No console access - MFA not required
 
-                # User has console access — check MFA
+                # User has console access - check MFA
                 mfa_devices = iam.list_mfa_devices(UserName=username)["MFADevices"]
                 if not mfa_devices:
                     result.findings.append(

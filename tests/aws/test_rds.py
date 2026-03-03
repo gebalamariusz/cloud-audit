@@ -38,7 +38,7 @@ def _create_db_instance(
 
 
 def test_rds_public_access_pass(mock_aws_provider: AWSProvider) -> None:
-    """Private RDS instance — no finding."""
+    """Private RDS instance - no finding."""
     rds = mock_aws_provider.session.client("rds", region_name="eu-central-1")
     _create_db_instance(rds, "private-db", publicly_accessible=False)
     result = check_rds_public_access(mock_aws_provider)
@@ -47,7 +47,7 @@ def test_rds_public_access_pass(mock_aws_provider: AWSProvider) -> None:
 
 
 def test_rds_public_access_fail(mock_aws_provider: AWSProvider) -> None:
-    """Public RDS instance — CRITICAL finding."""
+    """Public RDS instance - CRITICAL finding."""
     rds = mock_aws_provider.session.client("rds", region_name="eu-central-1")
     _create_db_instance(rds, "public-db", publicly_accessible=True)
     result = check_rds_public_access(mock_aws_provider)
@@ -59,7 +59,7 @@ def test_rds_public_access_fail(mock_aws_provider: AWSProvider) -> None:
 
 
 def test_rds_encryption_pass(mock_aws_provider: AWSProvider) -> None:
-    """Encrypted RDS instance — no finding."""
+    """Encrypted RDS instance - no finding."""
     rds = mock_aws_provider.session.client("rds", region_name="eu-central-1")
     _create_db_instance(rds, "encrypted-db", storage_encrypted=True)
     result = check_rds_encryption(mock_aws_provider)
@@ -68,7 +68,7 @@ def test_rds_encryption_pass(mock_aws_provider: AWSProvider) -> None:
 
 
 def test_rds_encryption_fail(mock_aws_provider: AWSProvider) -> None:
-    """Unencrypted RDS instance — HIGH finding."""
+    """Unencrypted RDS instance - HIGH finding."""
     rds = mock_aws_provider.session.client("rds", region_name="eu-central-1")
     _create_db_instance(rds, "unencrypted-db", storage_encrypted=False)
     result = check_rds_encryption(mock_aws_provider)
@@ -80,7 +80,7 @@ def test_rds_encryption_fail(mock_aws_provider: AWSProvider) -> None:
 
 
 def test_rds_multi_az_pass(mock_aws_provider: AWSProvider) -> None:
-    """Multi-AZ RDS instance — no finding."""
+    """Multi-AZ RDS instance - no finding."""
     rds = mock_aws_provider.session.client("rds", region_name="eu-central-1")
     _create_db_instance(rds, "ha-db", multi_az=True, instance_class="db.m5.large")
     result = check_rds_multi_az(mock_aws_provider)
@@ -89,7 +89,7 @@ def test_rds_multi_az_pass(mock_aws_provider: AWSProvider) -> None:
 
 
 def test_rds_multi_az_skip_micro(mock_aws_provider: AWSProvider) -> None:
-    """Micro instance without Multi-AZ — skipped (dev/test)."""
+    """Micro instance without Multi-AZ - skipped (dev/test)."""
     rds = mock_aws_provider.session.client("rds", region_name="eu-central-1")
     _create_db_instance(rds, "dev-db", multi_az=False, instance_class="db.t3.micro")
     result = check_rds_multi_az(mock_aws_provider)
@@ -98,7 +98,7 @@ def test_rds_multi_az_skip_micro(mock_aws_provider: AWSProvider) -> None:
 
 
 def test_rds_multi_az_fail(mock_aws_provider: AWSProvider) -> None:
-    """Large instance without Multi-AZ — MEDIUM finding."""
+    """Large instance without Multi-AZ - MEDIUM finding."""
     rds = mock_aws_provider.session.client("rds", region_name="eu-central-1")
     _create_db_instance(rds, "single-az-db", multi_az=False, instance_class="db.m5.large")
     result = check_rds_multi_az(mock_aws_provider)

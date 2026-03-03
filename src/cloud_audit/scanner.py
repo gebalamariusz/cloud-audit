@@ -1,4 +1,4 @@
-"""Scanner — orchestrates check execution and produces a report."""
+"""Scanner - orchestrates check execution and produces a report."""
 
 from __future__ import annotations
 

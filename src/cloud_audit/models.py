@@ -32,7 +32,7 @@ class Effort(str, Enum):
 
 
 class Remediation(BaseModel):
-    """Remediation details for a finding — CLI command, Terraform HCL, and docs link."""
+    """Remediation details for a finding - CLI command, Terraform HCL, and docs link."""
 
     cli: str = Field(description="AWS CLI command (copy-paste ready)")
     terraform: str = Field(description="Terraform HCL snippet")
@@ -58,7 +58,7 @@ SEVERITY_WEIGHT = {
 
 
 class Finding(BaseModel):
-    """A single audit finding — one issue detected in the infrastructure."""
+    """A single audit finding - one issue detected in the infrastructure."""
 
     check_id: str = Field(description="Unique check identifier, e.g. 'aws-iam-001'")
     title: str = Field(description="Short human-readable title")
@@ -74,7 +74,7 @@ class Finding(BaseModel):
 
 
 class CheckResult(BaseModel):
-    """Result of running a single check — may produce 0..N findings."""
+    """Result of running a single check - may produce 0..N findings."""
 
     check_id: str
     check_name: str
@@ -97,7 +97,7 @@ class ScanSummary(BaseModel):
 
 
 class ScanReport(BaseModel):
-    """Complete scan report — the top-level output."""
+    """Complete scan report - the top-level output."""
 
     provider: str
     account_id: str = ""

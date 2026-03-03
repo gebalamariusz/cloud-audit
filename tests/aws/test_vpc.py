@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 
 def test_default_vpc_pass(mock_aws_provider: AWSProvider) -> None:
-    """Default VPC with no ENIs — no finding."""
+    """Default VPC with no ENIs - no finding."""
     result = check_default_vpc_in_use(mock_aws_provider)
     assert result.error is None
     # moto creates a default VPC, but with no ENIs it should pass
@@ -24,7 +24,7 @@ def test_default_vpc_pass(mock_aws_provider: AWSProvider) -> None:
 
 
 def test_open_security_groups_pass(mock_aws_provider: AWSProvider) -> None:
-    """Security group with restricted rules — no finding."""
+    """Security group with restricted rules - no finding."""
     ec2 = mock_aws_provider.session.client("ec2", region_name="eu-central-1")
     sg = ec2.create_security_group(GroupName="restricted-sg", Description="Restricted SG")
     ec2.authorize_security_group_ingress(
@@ -44,7 +44,7 @@ def test_open_security_groups_pass(mock_aws_provider: AWSProvider) -> None:
 
 
 def test_open_security_groups_fail_all_traffic(mock_aws_provider: AWSProvider) -> None:
-    """Security group open to all traffic — CRITICAL finding."""
+    """Security group open to all traffic - CRITICAL finding."""
     ec2 = mock_aws_provider.session.client("ec2", region_name="eu-central-1")
     sg = ec2.create_security_group(GroupName="wide-open-sg", Description="Wide open")
     ec2.authorize_security_group_ingress(
@@ -66,7 +66,7 @@ def test_open_security_groups_fail_all_traffic(mock_aws_provider: AWSProvider) -
 
 
 def test_open_security_groups_fail_ssh(mock_aws_provider: AWSProvider) -> None:
-    """Security group with SSH open to internet — CRITICAL finding."""
+    """Security group with SSH open to internet - CRITICAL finding."""
     ec2 = mock_aws_provider.session.client("ec2", region_name="eu-central-1")
     sg = ec2.create_security_group(GroupName="ssh-open-sg", Description="SSH open")
     ec2.authorize_security_group_ingress(
@@ -88,7 +88,7 @@ def test_open_security_groups_fail_ssh(mock_aws_provider: AWSProvider) -> None:
 
 
 def test_vpc_flow_logs_pass(mock_aws_provider: AWSProvider) -> None:
-    """VPC with flow logs — no finding."""
+    """VPC with flow logs - no finding."""
     ec2 = mock_aws_provider.session.client("ec2", region_name="eu-central-1")
     vpc = ec2.create_vpc(CidrBlock="10.0.0.0/16")
     vpc_id = vpc["Vpc"]["VpcId"]
@@ -106,7 +106,7 @@ def test_vpc_flow_logs_pass(mock_aws_provider: AWSProvider) -> None:
 
 
 def test_vpc_flow_logs_fail(mock_aws_provider: AWSProvider) -> None:
-    """VPC without flow logs — MEDIUM finding."""
+    """VPC without flow logs - MEDIUM finding."""
     ec2 = mock_aws_provider.session.client("ec2", region_name="eu-central-1")
     vpc = ec2.create_vpc(CidrBlock="10.1.0.0/16")
     vpc_id = vpc["Vpc"]["VpcId"]

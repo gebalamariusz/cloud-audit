@@ -136,18 +136,18 @@ Run all checks, then open a pull request.
 
 Every check in cloud-audit must follow these principles:
 
-1. **High-signal only** — Would an attacker exploit this? If not, don't add it.
-2. **Clear severity** — CRITICAL means "fix today", LOW means "nice to have".
-3. **Actionable recommendation** — Tell the user exactly what to do, not "consider enabling encryption".
-4. **Tested** — Every check needs at least one PASS and one FAIL test case.
+1. **High-signal only** - Would an attacker exploit this? If not, don't add it.
+2. **Clear severity** - CRITICAL means "fix today", LOW means "nice to have".
+3. **Actionable recommendation** - Tell the user exactly what to do, not "consider enabling encryption".
+4. **Tested** - Every check needs at least one PASS and one FAIL test case.
 
 ## Code Conventions
 
-- **Python 3.10+** — Use `from __future__ import annotations` in every file
-- **Pydantic v2** — All data models use Pydantic with immutable config
-- **Ruff** — Handles both linting and formatting (config in `pyproject.toml`)
-- **mypy strict** — All code must pass `mypy --strict`
-- **Line length** — 120 characters max
+- **Python 3.10+** - Use `from __future__ import annotations` in every file
+- **Pydantic v2** - All data models use Pydantic with immutable config
+- **Ruff** - Handles both linting and formatting (config in `pyproject.toml`)
+- **mypy strict** - All code must pass `mypy --strict`
+- **Line length** - 120 characters max
 
 ## Reporting Bugs
 

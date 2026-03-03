@@ -15,14 +15,14 @@ if TYPE_CHECKING:
 
 
 def test_public_amis_pass(mock_aws_provider: AWSProvider) -> None:
-    """No custom AMIs — no findings."""
+    """No custom AMIs - no findings."""
     result = check_public_amis(mock_aws_provider)
     assert result.error is None
     assert len(result.findings) == 0
 
 
 def test_unencrypted_volumes_pass(mock_aws_provider: AWSProvider) -> None:
-    """Encrypted volume — no finding."""
+    """Encrypted volume - no finding."""
     ec2 = mock_aws_provider.session.client("ec2", region_name="eu-central-1")
     ec2.create_volume(
         AvailabilityZone="eu-central-1a",
@@ -36,7 +36,7 @@ def test_unencrypted_volumes_pass(mock_aws_provider: AWSProvider) -> None:
 
 
 def test_unencrypted_volumes_fail(mock_aws_provider: AWSProvider) -> None:
-    """Unencrypted volume — MEDIUM finding."""
+    """Unencrypted volume - MEDIUM finding."""
     ec2 = mock_aws_provider.session.client("ec2", region_name="eu-central-1")
     ec2.create_volume(
         AvailabilityZone="eu-central-1a",
@@ -53,14 +53,14 @@ def test_unencrypted_volumes_fail(mock_aws_provider: AWSProvider) -> None:
 
 
 def test_stopped_instances_pass(mock_aws_provider: AWSProvider) -> None:
-    """No stopped instances — no findings."""
+    """No stopped instances - no findings."""
     result = check_stopped_instances(mock_aws_provider)
     assert result.error is None
     assert len(result.findings) == 0
 
 
 def test_stopped_instances_fail(mock_aws_provider: AWSProvider) -> None:
-    """Stopped instance — LOW finding."""
+    """Stopped instance - LOW finding."""
     ec2 = mock_aws_provider.session.client("ec2", region_name="eu-central-1")
     # Launch and then stop an instance
     resp = ec2.run_instances(ImageId="ami-12345678", MinCount=1, MaxCount=1, InstanceType="t2.micro")

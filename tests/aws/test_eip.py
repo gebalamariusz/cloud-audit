@@ -11,14 +11,14 @@ if TYPE_CHECKING:
 
 
 def test_unattached_eips_pass(mock_aws_provider: AWSProvider) -> None:
-    """No EIPs — no findings."""
+    """No EIPs - no findings."""
     result = check_unattached_eips(mock_aws_provider)
     assert result.error is None
     assert len(result.findings) == 0
 
 
 def test_attached_eip_pass(mock_aws_provider: AWSProvider) -> None:
-    """EIP attached to instance — no finding."""
+    """EIP attached to instance - no finding."""
     ec2 = mock_aws_provider.session.client("ec2", region_name="eu-central-1")
     # Launch an instance and attach an EIP
     resp = ec2.run_instances(ImageId="ami-12345678", MinCount=1, MaxCount=1, InstanceType="t2.micro")
@@ -30,7 +30,7 @@ def test_attached_eip_pass(mock_aws_provider: AWSProvider) -> None:
 
 
 def test_unattached_eip_fail(mock_aws_provider: AWSProvider) -> None:
-    """Unattached EIP — LOW finding."""
+    """Unattached EIP - LOW finding."""
     ec2 = mock_aws_provider.session.client("ec2", region_name="eu-central-1")
     alloc = ec2.allocate_address(Domain="vpc")
     result = check_unattached_eips(mock_aws_provider)
