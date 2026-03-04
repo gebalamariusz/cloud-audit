@@ -6,14 +6,26 @@ from typing import TYPE_CHECKING
 
 import boto3
 
-from cloud_audit.providers.aws.checks import ec2, eip, iam, rds, s3, vpc
+from cloud_audit.providers.aws.checks import (
+    cloudtrail,
+    cloudwatch,
+    config_,
+    ec2,
+    eip,
+    guardduty,
+    iam,
+    kms,
+    rds,
+    s3,
+    vpc,
+)
 from cloud_audit.providers.base import BaseProvider
 
 if TYPE_CHECKING:
     from cloud_audit.providers.base import CheckFn
 
 # Registry of all AWS checks, grouped by service
-_CHECK_MODULES = [iam, s3, ec2, vpc, eip, rds]
+_CHECK_MODULES = [iam, s3, ec2, vpc, eip, rds, cloudtrail, guardduty, config_, kms, cloudwatch]
 
 
 class AWSProvider(BaseProvider):

@@ -9,7 +9,6 @@
   <a href="https://pypi.org/project/cloud-audit/"><img src="https://img.shields.io/pypi/pyversions/cloud-audit?style=flat" alt="Python versions"></a>
   <a href="https://github.com/gebalamariusz/cloud-audit/actions/workflows/ci.yml"><img src="https://github.com/gebalamariusz/cloud-audit/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow?style=flat" alt="License: MIT"></a>
-  <a href="https://pypi.org/project/cloud-audit/"><img src="https://img.shields.io/pypi/dm/cloud-audit?style=flat" alt="Downloads"></a>
 </p>
 
 ---
@@ -22,14 +21,18 @@
 
 59% of cloud security teams receive **500+ alerts daily**. 55% admit to **missing critical ones** ([Forrester/HelpNetSecurity](https://www.helpnetsecurity.com/2023/10/cloud-alert-fatigue/)). Most scanners make this worse, not better. cloud-audit takes a different approach:
 
-- **17 curated, high-signal checks** - every check catches something an attacker would actually exploit
+- **27 curated, high-signal checks** - every check catches something an attacker would actually exploit
 - **Every finding = copy-paste fix** - AWS CLI command + Terraform HCL + docs link, ready to go
-- **CIS Benchmark mapped** - 10 controls from CIS AWS Foundations Benchmark, compliance evidence included
+- **CIS Benchmark mapped** - 14 controls from CIS AWS Foundations Benchmark, compliance evidence included
 - **12 seconds, not 12 minutes** - scan completes before your coffee gets cold
 - **Zero configuration** - `pip install cloud-audit && cloud-audit scan` gives results immediately
 - **Beautiful reports** - dark-mode HTML report you can send to your manager or client
 
-> cloud-audit is not another Prowler. Prowler has 576 checks and takes hours. We have 17 checks and take seconds. Every finding comes with a ready-to-use fix.
+<p align="center">
+  <img src="assets/report-preview.png" alt="cloud-audit dark-mode HTML report preview" width="700">
+</p>
+
+> cloud-audit is not another Prowler. Prowler has 576 checks and takes hours. We have 27 checks and take seconds. Every finding comes with a ready-to-use fix.
 
 ## Every Finding = A Fix
 
@@ -110,6 +113,16 @@ pip install -e .
 | VPC flow logs disabled | `aws-vpc-003` | Medium | Without flow logs, you have zero network visibility for forensics |
 | Public RDS instances | `aws-rds-001` | Critical | Publicly accessible databases are the #1 cause of cloud data breaches |
 | RDS encryption at rest | `aws-rds-002` | High | Unencrypted databases risk data exposure in case of disk-level compromise |
+| CloudTrail not enabled | `aws-ct-001` | Critical | No multi-region trail means API activity goes unmonitored |
+| CloudTrail log validation | `aws-ct-002` | High | Without log validation, attackers can modify logs undetected |
+| CloudTrail bucket public | `aws-ct-003` | Critical | Public CloudTrail S3 bucket exposes all API logs |
+| GuardDuty not enabled | `aws-gd-001` | High | No threat detection for malicious activity or unauthorized behavior |
+| GuardDuty unresolved findings | `aws-gd-002` | Medium | Unresolved findings older than 30 days indicate ignored threats |
+| AWS Config not enabled | `aws-cfg-001` | Medium | No configuration history or change tracking for resources |
+| Config recorder stopped | `aws-cfg-002` | High | Config recorder exists but not recording changes |
+| KMS key rotation disabled | `aws-kms-001` | Medium | Customer-managed keys without automatic rotation (CIS 3.6) |
+| KMS wildcard key policy | `aws-kms-002` | High | Key policy with Principal: * allows any AWS principal to use the key |
+| Root usage alarm missing | `aws-cw-001` | High | No CloudWatch alarm for root account usage (CIS 4.3) |
 
 ### Cost
 
@@ -195,7 +208,7 @@ A score of **80+** is good, **50-79** needs attention, and **below 50** requires
 
 | Feature | cloud-audit | Prowler | ScoutSuite* |
 |---------|-------------|---------|-------------|
-| Checks | 17 (curated) | 576 (AWS) | ~200 |
+| Checks | 27 (curated) | 576 (AWS) | ~200 |
 | Scan time | ~12 seconds | 1-4 hours | 30-60 minutes |
 | Setup | `pip install` | `pip install` + config | `pip install` + config |
 | Alert fatigue | Zero - every finding matters | High - hundreds of findings | Moderate |
@@ -232,7 +245,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed contribution guidelines.
 
 - ~~**v0.1.0** - 17 AWS checks, CLI, HTML/JSON reports~~
 - ~~**v0.2.0** - Remediation engine (CLI + Terraform), CIS Benchmark mapping, 45 moto tests~~
-- **v0.3.0** - CloudTrail, GuardDuty, Config, KMS, CloudWatch checks (27 total)
+- ~~**v0.3.0** - CloudTrail, GuardDuty, Config, KMS, CloudWatch checks (27 total)~~
 - **v0.4.0** - Lambda, ECS, SSM, Secrets Manager checks (42 total)
 - **v0.5.0** - SARIF output (GitHub Security integration), config file, baseline/suppress
 - **v1.0.0** - Executive-ready reports, scan diff/compare, 45 curated checks
