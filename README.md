@@ -14,7 +14,7 @@
 ---
 
 <p align="center">
-  <img src="assets/demo.gif" alt="cloud-audit terminal output showing health score, findings, and remediation" width="700">
+  <img src="https://raw.githubusercontent.com/gebalamariusz/cloud-audit/main/assets/demo.gif" alt="cloud-audit terminal output showing health score, findings, and remediation" width="700">
 </p>
 
 ## Why cloud-audit?
@@ -29,7 +29,7 @@
 - **Beautiful reports** - dark-mode HTML report you can send to your manager or client
 
 <p align="center">
-  <img src="assets/report-preview.png" alt="cloud-audit dark-mode HTML report preview" width="700">
+  <img src="https://raw.githubusercontent.com/gebalamariusz/cloud-audit/main/assets/report-preview.png" alt="cloud-audit dark-mode HTML report preview" width="700">
 </p>
 
 > cloud-audit is not another Prowler. Prowler has 576 checks and takes hours. We have 42 checks and take seconds. Every finding comes with a ready-to-use fix.
