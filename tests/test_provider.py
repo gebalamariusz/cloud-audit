@@ -21,8 +21,7 @@ def test_assume_role_creates_session(monkeypatch: pytest.MonkeyPatch) -> None:
     # Create the role that will be assumed
     iam = boto3.client("iam", region_name="eu-central-1")
     trust_policy = (
-        '{"Version":"2012-10-17","Statement":'
-        '[{"Effect":"Allow","Principal":{"AWS":"*"},"Action":"sts:AssumeRole"}]}'
+        '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"*"},"Action":"sts:AssumeRole"}]}'
     )
     iam.create_role(RoleName="audit-role", AssumeRolePolicyDocument=trust_policy)
     role_arn = f"arn:aws:iam::{boto3.client('sts').get_caller_identity()['Account']}:role/audit-role"

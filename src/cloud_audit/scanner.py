@@ -46,9 +46,7 @@ def _apply_min_severity(report: ScanReport, min_severity: Severity) -> None:
     min_idx = _SEVERITY_ORDER.index(min_severity)
 
     for check_result in report.results:
-        check_result.findings = [
-            f for f in check_result.findings if _SEVERITY_ORDER.index(f.severity) <= min_idx
-        ]
+        check_result.findings = [f for f in check_result.findings if _SEVERITY_ORDER.index(f.severity) <= min_idx]
 
 
 def run_scan(

@@ -291,9 +291,7 @@ def scan(
     ] = None,
     quiet: Annotated[bool, typer.Option("--quiet", "-q", help="Quiet mode - exit code only")] = False,
     role_arn: Annotated[str | None, typer.Option("--role-arn", help="IAM role ARN for cross-account scanning")] = None,
-    config: Annotated[
-        Path | None, typer.Option("--config", help="Path to .cloud-audit.yml config file")
-    ] = None,
+    config: Annotated[Path | None, typer.Option("--config", help="Path to .cloud-audit.yml config file")] = None,
     remediation: Annotated[
         bool, typer.Option("--remediation", "-R", help="Show remediation details for findings")
     ] = False,
