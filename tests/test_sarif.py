@@ -145,21 +145,21 @@ def test_sarif_empty_findings() -> None:
     assert data["runs"][0]["tool"]["driver"]["rules"] == []
 
 
-def test_sarif_remediation_in_fixes() -> None:
-    """Findings with remediation have fixes section."""
+def test_sarif_remediation_in_properties() -> None:
+    """Findings with remediation have remediation info in properties."""
     report = _make_report()
     data = json.loads(generate_sarif(report))
     iam_result = next(r for r in data["runs"][0]["results"] if r["ruleId"] == "aws-iam-001")
-    assert "fixes" in iam_result
-    assert "CLI:" in iam_result["fixes"][0]["description"]["text"]
+    assert "remediation_cli" in iam_result["properties"]
+    assert "remediation_doc" in iam_result["properties"]
 
 
-def test_sarif_no_fixes_without_remediation() -> None:
-    """Findings without remediation have no fixes section."""
+def test_sarif_no_remediation_properties_without_remediation() -> None:
+    """Findings without remediation have no remediation properties."""
     report = _make_report()
     data = json.loads(generate_sarif(report))
     s3_result = next(r for r in data["runs"][0]["results"] if r["ruleId"] == "aws-s3-002")
-    assert "fixes" not in s3_result
+    assert "remediation_cli" not in s3_result["properties"]
 
 
 def test_sarif_compliance_tags_in_rules() -> None:

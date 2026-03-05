@@ -80,13 +80,10 @@ def _build_results(report: ScanReport) -> list[dict[str, Any]]:
             },
         }
         if finding.remediation:
-            result["fixes"] = [
-                {
-                    "description": {
-                        "text": f"CLI: {finding.remediation.cli}",
-                    },
-                }
-            ]
+            result["properties"]["remediation_cli"] = finding.remediation.cli
+            if finding.remediation.terraform:
+                result["properties"]["remediation_terraform"] = finding.remediation.terraform
+            result["properties"]["remediation_doc"] = finding.remediation.doc_url
         results.append(result)
     return results
 
