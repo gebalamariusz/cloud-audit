@@ -272,6 +272,7 @@ on:
     branches: [main]
 
 permissions:
+  id-token: write      # required for OIDC
   contents: read
   security-events: write
   actions: read
@@ -291,11 +292,11 @@ jobs:
       - name: Install cloud-audit
         run: pip install cloud-audit
 
+      # Recommended: OIDC (no static credentials stored in GitHub)
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: arn:aws:iam::123456789012:role/cloud-audit-github
           aws-region: eu-central-1
 
       # SARIF upload to GitHub Security tab
@@ -327,6 +328,49 @@ This gives you:
 - **Security tab**: findings appear as Code Scanning alerts with deduplication across runs
 - **PR comments**: a Markdown summary posted automatically on every pull request
 - **Exit code 1** when findings exist (use `continue-on-error: true` to prevent blocking)
+
+### AWS Authentication
+
+The example above uses **OIDC** (recommended). GitHub generates a short-lived token per workflow run, and AWS exchanges it for temporary credentials. No static keys stored in GitHub.
+
+To set this up in your AWS account:
+
+1. Create an [OIDC Identity Provider](https://docs.github.com/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services) with provider URL `https://token.actions.githubusercontent.com` and audience `sts.amazonaws.com`
+2. Create an IAM role with the `SecurityAudit` policy and a trust policy scoped to your repo:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {
+      "Federated": "arn:aws:iam::ACCOUNT_ID:oidc-provider/token.actions.githubusercontent.com"
+    },
+    "Action": "sts:AssumeRoleWithWebIdentity",
+    "Condition": {
+      "StringEquals": {
+        "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+      },
+      "StringLike": {
+        "token.actions.githubusercontent.com:sub": "repo:YOUR_ORG/YOUR_REPO:*"
+      }
+    }
+  }]
+}
+```
+
+3. Replace `role-to-assume` in the workflow with your role ARN
+
+**Alternative:** If you cannot use OIDC, you can use static credentials as a fallback:
+
+```yaml
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-central-1
+```
 
 ## AWS Permissions
 
