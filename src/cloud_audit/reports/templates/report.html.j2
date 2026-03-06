@@ -377,6 +377,32 @@
     .summary-grid { grid-template-columns: repeat(2, 1fr); }
     .finding-header { flex-direction: column; align-items: flex-start; }
   }
+
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f8f9fa;
+      --bg-card: #ffffff;
+      --border: #dee2e6;
+      --text: #212529;
+      --text-dim: #6c757d;
+      --teal: #0d9488;
+      --red: #dc2626;
+      --orange: #d97706;
+      --cyan: #0891b2;
+      --green: #16a34a;
+    }
+    .code-block { background: rgba(0,0,0,0.03); }
+    .copy-btn { background: #f8f9fa; }
+  }
+
+  @media print {
+    body { background: white; color: black; padding: 20px; }
+    .container { max-width: 100%; }
+    .copy-btn { display: none; }
+    .finding { break-inside: avoid; }
+    .remediation-panel { display: none; }
+    .footer a { color: black; }
+  }
 </style>
 </head>
 <body>
@@ -459,9 +485,9 @@
       <div class="remediation-content">
         <div class="remediation-label">Effort: <span class="effort-badge effort-{{ finding.remediation.effort.value }}">{{ finding.remediation.effort.value }}</span></div>
         <div class="remediation-label">AWS CLI</div>
-        <div class="code-block"><button class="copy-btn" onclick="copyCode(this)">Copy</button>{{ finding.remediation.cli }}</div>
+        <div class="code-block"><button class="copy-btn" onclick="copyCode(this)" aria-label="Copy code to clipboard">Copy</button>{{ finding.remediation.cli }}</div>
         <div class="remediation-label">Terraform</div>
-        <div class="code-block"><button class="copy-btn" onclick="copyCode(this)">Copy</button>{{ finding.remediation.terraform }}</div>
+        <div class="code-block"><button class="copy-btn" onclick="copyCode(this)" aria-label="Copy code to clipboard">Copy</button>{{ finding.remediation.terraform }}</div>
         <div class="remediation-doc"><a href="{{ finding.remediation.doc_url }}" target="_blank" rel="noopener">AWS Documentation &rarr;</a></div>
       </div>
     </details>
@@ -500,7 +526,17 @@
 </div>
 
 <script>
-function copyCode(btn){var t=btn.parentElement.textContent.replace('Copy','').trim();navigator.clipboard.writeText(t).then(function(){btn.textContent='Copied!';setTimeout(function(){btn.textContent='Copy'},1500)});}
+function copyCode(btn){
+  var block=btn.parentElement;
+  var clone=block.cloneNode(true);
+  var btns=clone.querySelectorAll('.copy-btn');
+  for(var i=0;i<btns.length;i++){btns[i].remove();}
+  var t=clone.textContent.trim();
+  navigator.clipboard.writeText(t).then(function(){
+    btn.textContent='Copied!';
+    setTimeout(function(){btn.textContent='Copy'},1500);
+  });
+}
 </script>
 </body>
 </html>

@@ -107,6 +107,7 @@ class ScanReport(BaseModel):
         return findings
 
     def compute_summary(self) -> None:
+        """Aggregate results into summary. Call once after all checks complete."""
         findings = self.all_findings
         self.summary.total_findings = len(findings)
         self.summary.resources_scanned = sum(r.resources_scanned for r in self.results)

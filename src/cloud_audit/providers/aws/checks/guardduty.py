@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from functools import partial
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from cloud_audit.models import Category, CheckResult, Effort, Finding, Remediation, Severity
@@ -21,7 +21,10 @@ def check_guardduty_enabled(provider: AWSProvider) -> CheckResult:
             gd = provider.session.client("guardduty", region_name=region)
             result.resources_scanned += 1
 
-            detectors = gd.list_detectors().get("DetectorIds", [])
+            detectors_paginator = gd.get_paginator("list_detectors")
+            detectors: list[str] = []
+            for det_page in detectors_paginator.paginate():
+                detectors.extend(det_page.get("DetectorIds", []))
             if not detectors:
                 result.findings.append(
                     Finding(
@@ -56,13 +59,14 @@ def check_guardduty_findings(provider: AWSProvider) -> CheckResult:
     result = CheckResult(check_id="aws-gd-002", check_name="GuardDuty unresolved findings")
 
     try:
-        from datetime import datetime, timezone
-
         now = datetime.now(timezone.utc)
 
         for region in provider.regions:
             gd = provider.session.client("guardduty", region_name=region)
-            detectors = gd.list_detectors().get("DetectorIds", [])
+            detectors_paginator = gd.get_paginator("list_detectors")
+            detectors: list[str] = []
+            for det_page in detectors_paginator.paginate():
+                detectors.extend(det_page.get("DetectorIds", []))
 
             for detector_id in detectors:
                 result.resources_scanned += 1
@@ -110,11 +114,13 @@ def check_guardduty_findings(provider: AWSProvider) -> CheckResult:
                             severity_counts["LOW"] = severity_counts.get("LOW", 0) + 1
 
                     sev_str = ", ".join(f"{k}: {v}" for k, v in sorted(severity_counts.items()))
+                    # Escalate finding severity if HIGH GuardDuty findings exist
+                    finding_severity = Severity.HIGH if severity_counts.get("HIGH", 0) > 0 else Severity.MEDIUM
                     result.findings.append(
                         Finding(
                             check_id="aws-gd-002",
                             title=f"{len(old_findings)} unresolved GuardDuty finding(s) in {region} older than 30 days",
-                            severity=Severity.MEDIUM,
+                            severity=finding_severity,
                             category=Category.SECURITY,
                             resource_type="AWS::GuardDuty::Detector",
                             resource_id=detector_id,
@@ -154,10 +160,9 @@ def check_guardduty_findings(provider: AWSProvider) -> CheckResult:
 
 def get_checks(provider: AWSProvider) -> list[CheckFn]:
     """Return all GuardDuty checks bound to the provider."""
-    checks: list[CheckFn] = [
-        partial(check_guardduty_enabled, provider),
-        partial(check_guardduty_findings, provider),
+    from cloud_audit.providers.base import make_check
+
+    return [
+        make_check(check_guardduty_enabled, provider, check_id="aws-gd-001", category=Category.SECURITY),
+        make_check(check_guardduty_findings, provider, check_id="aws-gd-002", category=Category.SECURITY),
     ]
-    for fn in checks:
-        fn.category = Category.SECURITY
-    return checks

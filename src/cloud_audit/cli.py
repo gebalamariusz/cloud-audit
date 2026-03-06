@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Annotated
@@ -31,11 +32,11 @@ SEVERITY_COLORS = {
 }
 
 SEVERITY_ICONS = {
-    Severity.CRITICAL: "\u2716",
-    Severity.HIGH: "\u2716",
-    Severity.MEDIUM: "\u26a0",
-    Severity.LOW: "\u25cb",
-    Severity.INFO: "\u2139",
+    Severity.CRITICAL: "x",
+    Severity.HIGH: "x",
+    Severity.MEDIUM: "!",
+    Severity.LOW: "o",
+    Severity.INFO: "i",
 }
 
 
@@ -188,7 +189,8 @@ def _print_remediation(findings: list[Finding]) -> None:
 
     for f in actionable:
         rem = f.remediation
-        assert rem is not None  # noqa: S101
+        if rem is None:
+            continue
         sev_color = SEVERITY_COLORS[f.severity]
         effort_color = EFFORT_COLORS[rem.effort.value]
 
@@ -204,6 +206,11 @@ def _print_remediation(findings: list[Finding]) -> None:
             console.print(f"  [dim]Terraform:[/dim] {tf_preview} ...")
         console.print(f"  [dim]Docs:[/dim] {rem.doc_url}")
         console.print()
+
+
+def _sanitize_shell(value: str) -> str:
+    """Strip shell metacharacters from values embedded in bash script comments."""
+    return re.sub(r"[`$();&|\\'\"\n\r]", "", value)
 
 
 def _export_fixes(findings: list[Finding], output_path: Path) -> None:
@@ -235,15 +242,20 @@ def _export_fixes(findings: list[Finding], output_path: Path) -> None:
 
     for f in actionable:
         rem = f.remediation
-        assert rem is not None  # noqa: S101
-        lines.append(f"# [{f.severity.value.upper()}] {f.title}")
-        lines.append(f"# Resource: {f.resource_id}")
+        if rem is None:
+            continue
+        lines.append(f"# [{f.severity.value.upper()}] {_sanitize_shell(f.title)}")
+        lines.append(f"# Resource: {_sanitize_shell(f.resource_id)}")
         if f.compliance_refs:
             lines.append(f"# Compliance: {', '.join(f.compliance_refs)}")
-        lines.append(f"# {rem.cli}")
+        lines.append(f"# {_sanitize_shell(rem.cli)}")
         lines.append("")
 
+    import contextlib
+
     output_path.write_text("\n".join(lines), encoding="utf-8")
+    with contextlib.suppress(OSError):
+        output_path.chmod(0o700)
     console.print(f"\n[green]Remediation script saved to {output_path}[/green]")
     console.print(f"[dim]  {len(actionable)} commands (commented out). Review before uncommenting.[/dim]")
 
@@ -257,7 +269,13 @@ def _resolve_env_min_severity() -> Severity | None:
     """Read CLOUD_AUDIT_MIN_SEVERITY env var."""
     val = os.environ.get("CLOUD_AUDIT_MIN_SEVERITY")
     if val:
-        return Severity(val.lower())
+        try:
+            return Severity(val.lower())
+        except ValueError:
+            console.print(
+                f"[red]Invalid CLOUD_AUDIT_MIN_SEVERITY='{val}'. Valid: {', '.join(s.value for s in Severity)}[/red]"
+            )
+            raise typer.Exit(2) from None
     return None
 
 
@@ -306,7 +324,7 @@ def scan(
     # Load config file
     try:
         cfg = load_config(config)
-    except (ValueError, Exception) as e:
+    except Exception as e:
         console.print(f"[red]Config error: {e}[/red]")
         raise typer.Exit(2) from None
 
@@ -330,7 +348,13 @@ def scan(
     env_severity = _resolve_env_min_severity()
     effective_severity: Severity | None = None
     if min_severity:
-        effective_severity = Severity(min_severity.lower())
+        try:
+            effective_severity = Severity(min_severity.lower())
+        except ValueError:
+            console.print(
+                f"[red]Invalid --min-severity='{min_severity}'. Valid: {', '.join(s.value for s in Severity)}[/red]"
+            )
+            raise typer.Exit(2) from None
     elif env_severity:
         effective_severity = env_severity
     elif cfg.min_severity:
@@ -349,6 +373,14 @@ def scan(
         exclude_checks=all_excludes,
         suppressions=cfg.suppressions,
     )
+
+    # Validate format early (before scan) to avoid wasting time
+    if fmt and fmt not in ("json", "html", "sarif", "markdown"):
+        console.print(f"[red]Unknown format '{fmt}'. Available: json, html, sarif, markdown[/red]")
+        raise typer.Exit(2)
+    if fmt == "html" and not output:
+        console.print("[red]HTML format requires --output <file.html>[/red]")
+        raise typer.Exit(2)
 
     category_list = [c.strip().lower() for c in categories.split(",")] if categories else None
 
@@ -469,14 +501,15 @@ def list_checks(
         _sentinel = type("_Sentinel", (), {})()
         try:
             checks = module.get_checks(_sentinel)
-        except Exception:  # noqa: S112
+        except Exception as exc:  # noqa: S112
+            console.print(f"[yellow]Warning: failed to load checks from {module.__name__}: {exc}[/yellow]")
             continue
 
         for check_fn in checks:
             category = getattr(check_fn, "category", "unknown")
 
-            cat_val = getattr(category, "value", category)
-            if category_list and str(category) not in category_list and cat_val not in category_list:
+            cat_val = getattr(category, "value", str(category))
+            if category_list and cat_val not in category_list:
                 continue
 
             func_name = getattr(check_fn, "func", check_fn).__name__

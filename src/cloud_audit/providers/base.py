@@ -3,10 +3,19 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from functools import partial
 from typing import Any
 
 # A check is a callable that returns a CheckResult
 CheckFn = Any  # Callable[[], CheckResult] - simplified for Python 3.10 compat
+
+
+def make_check(fn: Any, provider: Any, *, check_id: str, category: Any) -> CheckFn:
+    """Create a check partial with .check_id and .category metadata attached."""
+    p = partial(fn, provider)
+    p.check_id = check_id  # type: ignore[attr-defined]
+    p.category = category  # type: ignore[attr-defined]
+    return p
 
 
 class BaseProvider(ABC):

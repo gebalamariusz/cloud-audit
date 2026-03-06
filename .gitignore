@@ -38,7 +38,7 @@ coverage.xml
 *.html
 !src/cloud_audit/reports/templates/*.html.j2
 
-# Internal / local-only files (never push)
+# Internal / local-only .md files (never push) — allowlist specific docs below
 *.md
 !CODE_OF_CONDUCT.md
 !README.md

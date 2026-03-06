@@ -17,10 +17,12 @@ if TYPE_CHECKING:
     from cloud_audit.providers.aws.provider import AWSProvider
 
 
-def test_root_mfa_pass(mock_aws_provider: AWSProvider) -> None:
-    """Root MFA enabled - no findings."""
-    # moto's default account has MFA disabled, so this will produce a finding
-    # We test that the check runs without errors and returns a result
+def test_root_mfa_runs_without_error(mock_aws_provider: AWSProvider) -> None:
+    """Root MFA check runs without errors.
+
+    Note: moto's default account has MFA disabled, so this doesn't test the "pass" path.
+    It verifies the check executes correctly and returns a valid result.
+    """
     result = check_root_mfa(mock_aws_provider)
     assert result.check_id == "aws-iam-001"
     assert result.resources_scanned == 1

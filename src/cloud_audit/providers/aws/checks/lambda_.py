@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from functools import partial
 from typing import TYPE_CHECKING
 
 from cloud_audit.models import Category, CheckResult, Effort, Finding, Remediation, Severity
@@ -12,14 +11,19 @@ if TYPE_CHECKING:
     from cloud_audit.providers.aws.provider import AWSProvider
     from cloud_audit.providers.base import CheckFn
 
+# Last verified: 2026-03-06. Update periodically from:
+# https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html
 _DEPRECATED_RUNTIMES = {
     "python3.6",
     "python3.7",
     "python3.8",
+    "python3.9",
     "nodejs12.x",
     "nodejs14.x",
     "nodejs16.x",
+    "nodejs18.x",
     "dotnetcore3.1",
+    "dotnet6",
     "ruby2.7",
     "java8",
     "go1.x",
@@ -192,11 +196,10 @@ def check_env_secrets(provider: AWSProvider) -> CheckResult:
 
 def get_checks(provider: AWSProvider) -> list[CheckFn]:
     """Return all Lambda checks bound to the provider."""
-    checks: list[CheckFn] = [
-        partial(check_public_function_url, provider),
-        partial(check_deprecated_runtime, provider),
-        partial(check_env_secrets, provider),
+    from cloud_audit.providers.base import make_check
+
+    return [
+        make_check(check_public_function_url, provider, check_id="aws-lambda-001", category=Category.SECURITY),
+        make_check(check_deprecated_runtime, provider, check_id="aws-lambda-002", category=Category.SECURITY),
+        make_check(check_env_secrets, provider, check_id="aws-lambda-003", category=Category.SECURITY),
     ]
-    for fn in checks:
-        fn.category = Category.SECURITY
-    return checks

@@ -1,5 +1,8 @@
 """cloud-audit - Scan your cloud infrastructure for security, cost, and reliability issues."""
 
-from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError, version
 
-__version__ = version("cloud-audit")
+try:
+    __version__ = version("cloud-audit")
+except PackageNotFoundError:
+    __version__ = "0.0.0-dev"

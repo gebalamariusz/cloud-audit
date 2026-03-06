@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cloud-audit"
-version = "0.5.2"
+version = "0.6.0"
 description = "Open-source AWS security scanner. 45 checks, each with a ready-to-use fix."
 readme = "README.md"
 license = "MIT"
@@ -35,7 +35,7 @@ dependencies = [
     "typer>=0.15.0",
     "rich>=13.9.0",
     "pydantic>=2.10.0",
-    "jinja2>=3.1.0",
+    "jinja2>=3.1.6",
     "pyyaml>=6.0",
 ]
 

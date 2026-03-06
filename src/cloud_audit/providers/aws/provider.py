@@ -66,6 +66,7 @@ class AWSProvider(BaseProvider):
                 aws_access_key_id=creds["AccessKeyId"],
                 aws_secret_access_key=creds["SecretAccessKey"],
                 aws_session_token=creds["SessionToken"],
+                region_name=base_session.region_name,
             )
         else:
             self._session = base_session

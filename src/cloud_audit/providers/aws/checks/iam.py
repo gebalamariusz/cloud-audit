@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from functools import partial
+import json
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from cloud_audit.models import Category, CheckResult, Effort, Finding, Remediation, Severity
@@ -119,8 +120,6 @@ def check_access_keys_rotation(provider: AWSProvider) -> CheckResult:
     result = CheckResult(check_id="aws-iam-003", check_name="Access key rotation")
 
     try:
-        from datetime import datetime, timezone
-
         now = datetime.now(timezone.utc)
         max_age_days = 90
         paginator = iam.get_paginator("list_users")
@@ -185,8 +184,6 @@ def check_unused_access_keys(provider: AWSProvider) -> CheckResult:
     result = CheckResult(check_id="aws-iam-004", check_name="Unused access keys")
 
     try:
-        from datetime import datetime, timezone
-
         now = datetime.now(timezone.utc)
         max_unused_days = 30
         paginator = iam.get_paginator("list_users")
@@ -265,8 +262,6 @@ def check_overly_permissive_policy(provider: AWSProvider) -> CheckResult:
     result = CheckResult(check_id="aws-iam-005", check_name="Overly permissive IAM policies")
 
     try:
-        import json
-
         paginator = iam.get_paginator("list_policies")
         for page in paginator.paginate(Scope="Local"):
             for policy in page["Policies"]:
@@ -443,14 +438,13 @@ def check_weak_password_policy(provider: AWSProvider) -> CheckResult:
 
 def get_checks(provider: AWSProvider) -> list[CheckFn]:
     """Return all IAM checks bound to the provider."""
-    checks: list[CheckFn] = [
-        partial(check_root_mfa, provider),
-        partial(check_users_mfa, provider),
-        partial(check_access_keys_rotation, provider),
-        partial(check_unused_access_keys, provider),
-        partial(check_overly_permissive_policy, provider),
-        partial(check_weak_password_policy, provider),
+    from cloud_audit.providers.base import make_check
+
+    return [
+        make_check(check_root_mfa, provider, check_id="aws-iam-001", category=Category.SECURITY),
+        make_check(check_users_mfa, provider, check_id="aws-iam-002", category=Category.SECURITY),
+        make_check(check_access_keys_rotation, provider, check_id="aws-iam-003", category=Category.SECURITY),
+        make_check(check_unused_access_keys, provider, check_id="aws-iam-004", category=Category.SECURITY),
+        make_check(check_overly_permissive_policy, provider, check_id="aws-iam-005", category=Category.SECURITY),
+        make_check(check_weak_password_policy, provider, check_id="aws-iam-006", category=Category.SECURITY),
     ]
-    for fn in checks:
-        fn.category = Category.SECURITY
-    return checks

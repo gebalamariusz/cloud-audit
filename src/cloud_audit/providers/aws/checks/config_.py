@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from functools import partial
 from typing import TYPE_CHECKING
 
 from cloud_audit.models import Category, CheckResult, Effort, Finding, Remediation, Severity
@@ -128,10 +127,9 @@ def check_config_recorder_active(provider: AWSProvider) -> CheckResult:
 
 def get_checks(provider: AWSProvider) -> list[CheckFn]:
     """Return all AWS Config checks bound to the provider."""
-    checks: list[CheckFn] = [
-        partial(check_config_enabled, provider),
-        partial(check_config_recorder_active, provider),
+    from cloud_audit.providers.base import make_check
+
+    return [
+        make_check(check_config_enabled, provider, check_id="aws-cfg-001", category=Category.SECURITY),
+        make_check(check_config_recorder_active, provider, check_id="aws-cfg-002", category=Category.SECURITY),
     ]
-    for fn in checks:
-        fn.category = Category.SECURITY
-    return checks

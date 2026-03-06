@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from functools import partial
 from typing import TYPE_CHECKING
 
 from cloud_audit.models import Category, CheckResult, Effort, Finding, Remediation, Severity
@@ -18,7 +17,7 @@ def check_cloudtrail_enabled(provider: AWSProvider) -> CheckResult:
 
     try:
         ct = provider.session.client("cloudtrail", region_name=provider.regions[0])
-        trails = ct.describe_trails(includeShadowTrails=False).get("trailList", [])
+        trails = ct.describe_trails(includeShadowTrails=True).get("trailList", [])
         result.resources_scanned = 1
 
         multi_region = any(t.get("IsMultiRegionTrail", False) for t in trails)
@@ -94,9 +93,15 @@ def check_cloudtrail_log_validation(provider: AWSProvider) -> CheckResult:
 
     try:
         ct = provider.session.client("cloudtrail", region_name=provider.regions[0])
-        trails = ct.describe_trails(includeShadowTrails=False).get("trailList", [])
+        trails = ct.describe_trails(includeShadowTrails=True).get("trailList", [])
+        # Deduplicate by trail ARN (shadow trails appear in multiple regions)
+        seen_arns: set[str] = set()
 
         for trail in trails:
+            trail_arn = trail.get("TrailARN", "")
+            if trail_arn in seen_arns:
+                continue
+            seen_arns.add(trail_arn)
             trail_name = trail.get("Name", "unknown")
             result.resources_scanned += 1
 
@@ -138,9 +143,14 @@ def check_cloudtrail_bucket_public(provider: AWSProvider) -> CheckResult:
     try:
         ct = provider.session.client("cloudtrail", region_name=provider.regions[0])
         s3 = provider.session.client("s3")
-        trails = ct.describe_trails(includeShadowTrails=False).get("trailList", [])
+        trails = ct.describe_trails(includeShadowTrails=True).get("trailList", [])
+        seen_arns: set[str] = set()
 
         for trail in trails:
+            trail_arn = trail.get("TrailARN", "")
+            if trail_arn in seen_arns:
+                continue
+            seen_arns.add(trail_arn)
             bucket_name = trail.get("S3BucketName")
             trail_name = trail.get("Name", "unknown")
             if not bucket_name:
@@ -212,11 +222,10 @@ def check_cloudtrail_bucket_public(provider: AWSProvider) -> CheckResult:
 
 def get_checks(provider: AWSProvider) -> list[CheckFn]:
     """Return all CloudTrail checks bound to the provider."""
-    checks: list[CheckFn] = [
-        partial(check_cloudtrail_enabled, provider),
-        partial(check_cloudtrail_log_validation, provider),
-        partial(check_cloudtrail_bucket_public, provider),
+    from cloud_audit.providers.base import make_check
+
+    return [
+        make_check(check_cloudtrail_enabled, provider, check_id="aws-ct-001", category=Category.SECURITY),
+        make_check(check_cloudtrail_log_validation, provider, check_id="aws-ct-002", category=Category.SECURITY),
+        make_check(check_cloudtrail_bucket_public, provider, check_id="aws-ct-003", category=Category.SECURITY),
     ]
-    for fn in checks:
-        fn.category = Category.SECURITY
-    return checks

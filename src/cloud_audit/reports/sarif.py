@@ -36,6 +36,7 @@ def _build_rules(report: ScanReport) -> list[dict[str, Any]]:
         rule: dict[str, Any] = {
             "id": finding.check_id,
             "shortDescription": {"text": finding.title},
+            "fullDescription": {"text": finding.description},
             "defaultConfiguration": {
                 "level": _SEVERITY_MAP.get(finding.severity.value, "warning"),
             },
@@ -66,7 +67,7 @@ def _build_results(report: ScanReport) -> list[dict[str, Any]]:
                     "physicalLocation": {
                         "artifactLocation": {
                             "uri": finding.resource_id,
-                            "uriBaseId": finding.region,
+                            "uriBaseId": "%CLOUD%",
                         },
                     },
                 }
@@ -103,6 +104,11 @@ def generate_sarif(report: ScanReport) -> str:
                         "version": __version__,
                         "informationUri": "https://github.com/gebalamariusz/cloud-audit",
                         "rules": _build_rules(report),
+                    },
+                },
+                "originalUriBaseIds": {
+                    "%CLOUD%": {
+                        "description": {"text": "Cloud resource identifier"},
                     },
                 },
                 "results": _build_results(report),

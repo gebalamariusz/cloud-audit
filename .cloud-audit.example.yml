@@ -1,0 +1,30 @@
+# cloud-audit configuration file
+# Copy to .cloud-audit.yml and customize.
+
+# AWS profile (optional — uses default if not set)
+# profile: my-profile
+
+# Regions to scan (default: session region only)
+# regions:
+#   - eu-central-1
+#   - us-east-1
+
+# Minimum severity to report: critical, high, medium, low, info
+# min_severity: medium
+
+# Checks to skip entirely (no API calls made)
+# exclude_checks:
+#   - aws-ec2-003   # Stopped instances (we use auto-scaling)
+#   - aws-s3-004    # Lifecycle policies (managed by org policy)
+
+# Suppressions: accepted findings with audit trail
+# suppressions:
+#   - check_id: aws-vpc-002
+#     resource_id: sg-0abc123def456
+#     reason: "Intentionally open for ALB health checks"
+#     accepted_by: "mariusz@example.com"
+#     expires: "2026-06-01"  # last day suppression is active (inclusive)
+#
+#   - check_id: aws-s3-003
+#     reason: "Versioning handled by replication policy"
+#     accepted_by: "team-lead"

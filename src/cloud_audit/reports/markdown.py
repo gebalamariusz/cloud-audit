@@ -72,6 +72,9 @@ def generate_markdown(report: ScanReport) -> str:
             marker = _SEVERITY_MARKERS.get(f.severity.value, f.severity.value)
             resource = f.resource_id[:40] + "..." if len(f.resource_id) > 40 else f.resource_id
             title = f.title[:60] + "..." if len(f.title) > 60 else f.title
+            # Escape pipes in values to prevent breaking markdown table
+            resource = resource.replace("|", "\\|")
+            title = title.replace("|", "\\|")
             lines.append(f"| **{marker}** | {f.check_id} | {f.region} | `{resource}` | {title} |")
 
         lines.append("")

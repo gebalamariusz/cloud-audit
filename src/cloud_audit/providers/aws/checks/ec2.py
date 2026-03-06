@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from functools import partial
+import shlex
 from typing import TYPE_CHECKING
 
 from cloud_audit.models import Category, CheckResult, Effort, Finding, Remediation, Severity
@@ -152,7 +152,7 @@ def check_stopped_instances(provider: AWSProvider) -> CheckResult:
                                     cli=(
                                         f"# WARNING: This will permanently delete the instance!\n"
                                         f"# Create an AMI first if you need the data:\n"
-                                        f"aws ec2 create-image --instance-id {instance_id} --name '{name_tag}-backup' --region {region}\n"
+                                        f"aws ec2 create-image --instance-id {instance_id} --name {shlex.quote(f'{name_tag}-backup')} --region {region}\n"
                                         f"# Then terminate:\n"
                                         f"aws ec2 terminate-instances --instance-ids {instance_id} --region {region}"
                                     ),
@@ -293,15 +293,12 @@ def check_termination_protection(provider: AWSProvider) -> CheckResult:
 
 def get_checks(provider: AWSProvider) -> list[CheckFn]:
     """Return all EC2 checks bound to the provider."""
-    checks: list[CheckFn] = [
-        partial(check_public_amis, provider),
-        partial(check_unencrypted_volumes, provider),
-        partial(check_stopped_instances, provider),
-        partial(check_imdsv1, provider),
-        partial(check_termination_protection, provider),
+    from cloud_audit.providers.base import make_check
+
+    return [
+        make_check(check_public_amis, provider, check_id="aws-ec2-001", category=Category.SECURITY),
+        make_check(check_unencrypted_volumes, provider, check_id="aws-ec2-002", category=Category.SECURITY),
+        make_check(check_stopped_instances, provider, check_id="aws-ec2-003", category=Category.COST),
+        make_check(check_imdsv1, provider, check_id="aws-ec2-004", category=Category.SECURITY),
+        make_check(check_termination_protection, provider, check_id="aws-ec2-005", category=Category.RELIABILITY),
     ]
-    for fn in checks:
-        fn.category = Category.SECURITY
-    checks[2].category = Category.COST
-    checks[4].category = Category.RELIABILITY
-    return checks

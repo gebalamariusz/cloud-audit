@@ -131,7 +131,9 @@ def test_suppression_does_not_match_different_check() -> None:
 
 def test_exclude_checks_removes_entire_result() -> None:
     fn1 = partial(_check_with_findings, _make_finding(check_id="aws-iam-001"), check_id="aws-iam-001")
+    fn1.check_id = "aws-iam-001"  # type: ignore[attr-defined]
     fn2 = partial(_check_with_findings, _make_finding(check_id="aws-s3-001"), check_id="aws-s3-001")
+    fn2.check_id = "aws-s3-001"  # type: ignore[attr-defined]
     provider = _make_provider(fn1, fn2)
     config = CloudAuditConfig(exclude_checks=["aws-iam-001"])
     report, _ = run_scan(provider, config=config, quiet=True)  # type: ignore[arg-type]
@@ -203,9 +205,13 @@ def test_exclude_then_suppress_then_severity() -> None:
     f_kept = _make_finding(check_id="aws-kept-003", severity=Severity.CRITICAL)
 
     fn1 = partial(_check_with_findings, f_excluded, check_id="aws-excluded-001")
+    fn1.check_id = "aws-excluded-001"  # type: ignore[attr-defined]
     fn2 = partial(_check_with_findings, f_suppressed, check_id="aws-kept-001")
+    fn2.check_id = "aws-kept-001"  # type: ignore[attr-defined]
     fn3 = partial(_check_with_findings, f_low, check_id="aws-kept-002")
+    fn3.check_id = "aws-kept-002"  # type: ignore[attr-defined]
     fn4 = partial(_check_with_findings, f_kept, check_id="aws-kept-003")
+    fn4.check_id = "aws-kept-003"  # type: ignore[attr-defined]
 
     provider = _make_provider(fn1, fn2, fn3, fn4)
     config = CloudAuditConfig(

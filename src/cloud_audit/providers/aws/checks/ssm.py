@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from functools import partial
 from typing import TYPE_CHECKING
 
 from cloud_audit.models import Category, CheckResult, Effort, Finding, Remediation, Severity
@@ -137,10 +136,9 @@ def check_insecure_parameters(provider: AWSProvider) -> CheckResult:
 
 def get_checks(provider: AWSProvider) -> list[CheckFn]:
     """Return all SSM checks bound to the provider."""
-    checks: list[CheckFn] = [
-        partial(check_ec2_not_managed, provider),
-        partial(check_insecure_parameters, provider),
+    from cloud_audit.providers.base import make_check
+
+    return [
+        make_check(check_ec2_not_managed, provider, check_id="aws-ssm-001", category=Category.SECURITY),
+        make_check(check_insecure_parameters, provider, check_id="aws-ssm-002", category=Category.SECURITY),
     ]
-    for fn in checks:
-        fn.category = Category.SECURITY
-    return checks

@@ -2,14 +2,47 @@
 
 from __future__ import annotations
 
-from functools import partial
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from cloud_audit.models import Category, CheckResult, Effort, Finding, Remediation, Severity
 
 if TYPE_CHECKING:
     from cloud_audit.providers.aws.provider import AWSProvider
     from cloud_audit.providers.base import CheckFn
+
+
+def _has_root_usage_alarm(logs: Any, cw: Any, lg_name: str) -> bool:
+    """Return True if the log group has a root-usage metric filter with an alarm."""
+    try:
+        mf_paginator = logs.get_paginator("describe_metric_filters")
+        all_filters: list[Any] = []
+        for mf_page in mf_paginator.paginate(logGroupName=lg_name):
+            all_filters.extend(mf_page.get("metricFilters", []))
+    except Exception:
+        return False
+
+    for mf in all_filters:
+        pattern = mf.get("filterPattern", "")
+        if "Root" not in pattern and "root" not in pattern:
+            continue
+        if "userIdentity" not in pattern and "ConsoleLogin" not in pattern:
+            continue
+
+        for mt in mf.get("metricTransformations", []):
+            metric_name = mt.get("metricName", "")
+            metric_ns = mt.get("metricNamespace", "")
+            if not metric_name:
+                continue
+            try:
+                alarms = cw.describe_alarms_for_metric(
+                    MetricName=metric_name,
+                    Namespace=metric_ns,
+                ).get("MetricAlarms", [])
+                if alarms:
+                    return True
+            except Exception:
+                continue
+    return False
 
 
 def check_root_usage_alarm(provider: AWSProvider) -> CheckResult:
@@ -22,47 +55,35 @@ def check_root_usage_alarm(provider: AWSProvider) -> CheckResult:
         cw = provider.session.client("cloudwatch", region_name=region)
         result.resources_scanned = 1
 
-        # Look for a metric filter on CloudTrail log group that watches for root usage
         found = False
+
+        # Try CloudTrail-named log groups first (most common convention)
+        ct_prefixes = ["cloudtrail", "CloudTrail", "aws-cloudtrail"]
         paginator = logs.get_paginator("describe_log_groups")
-        for page in paginator.paginate():
-            for lg in page["logGroups"]:
-                lg_name = lg["logGroupName"]
-                try:
-                    filters = logs.describe_metric_filters(logGroupName=lg_name).get("metricFilters", [])
-                except Exception:
-                    continue
-
-                for mf in filters:
-                    pattern = mf.get("filterPattern", "")
-                    # CIS 4.3 pattern matches root usage
-                    if "Root" not in pattern and "root" not in pattern:
-                        continue
-                    if "userIdentity" not in pattern and "ConsoleLogin" not in pattern:
-                        continue
-
-                    # Check if there's an alarm on this metric
-                    for mt in mf.get("metricTransformations", []):
-                        metric_name = mt.get("metricName", "")
-                        metric_ns = mt.get("metricNamespace", "")
-                        if not metric_name:
-                            continue
-                        try:
-                            alarms = cw.describe_alarms_for_metric(
-                                MetricName=metric_name,
-                                Namespace=metric_ns,
-                            ).get("MetricAlarms", [])
-                            if alarms:
-                                found = True
-                                break
-                        except Exception:
-                            continue
+        for prefix in ct_prefixes:
+            try:
+                for page in paginator.paginate(logGroupNamePrefix=prefix):
+                    for lg in page["logGroups"]:
+                        if _has_root_usage_alarm(logs, cw, lg["logGroupName"]):
+                            found = True
+                            break
                     if found:
+                        break
+            except Exception:
+                continue
+            if found:
+                break
+
+        # Fall back to scanning all log groups if not found
+        if not found:
+            for page in paginator.paginate():
+                for lg in page["logGroups"]:
+                    lg_name = lg["logGroupName"]
+                    if _has_root_usage_alarm(logs, cw, lg_name):
+                        found = True
                         break
                 if found:
                     break
-            if found:
-                break
 
         if not found:
             result.findings.append(
@@ -151,9 +172,8 @@ def check_root_usage_alarm(provider: AWSProvider) -> CheckResult:
 
 def get_checks(provider: AWSProvider) -> list[CheckFn]:
     """Return all CloudWatch checks bound to the provider."""
-    checks: list[CheckFn] = [
-        partial(check_root_usage_alarm, provider),
+    from cloud_audit.providers.base import make_check
+
+    return [
+        make_check(check_root_usage_alarm, provider, check_id="aws-cw-001", category=Category.SECURITY),
     ]
-    for fn in checks:
-        fn.category = Category.SECURITY
-    return checks

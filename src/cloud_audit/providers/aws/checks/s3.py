@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from cloud_audit.models import Category, CheckResult, Effort, Finding, Remediation, Severity
@@ -14,7 +13,10 @@ if TYPE_CHECKING:
 
 def _tf_name(name: str) -> str:
     """Sanitize a resource name for use as a Terraform identifier."""
-    return name.replace(".", "_").replace("-", "_")
+    sanitized = name.replace(".", "_").replace("-", "_")
+    if sanitized and sanitized[0].isdigit():
+        sanitized = f"bucket_{sanitized}"
+    return sanitized
 
 
 def _s3_public_access_remediation(name: str) -> Remediation:
@@ -39,12 +41,22 @@ def _s3_public_access_remediation(name: str) -> Remediation:
     )
 
 
+_bucket_cache: list[Any] | None = None
+
+
+def _reset_bucket_cache() -> None:
+    """Reset the bucket list cache (called between scans and in tests)."""
+    global _bucket_cache  # noqa: PLW0603
+    _bucket_cache = None
+
+
 def _list_buckets(provider: AWSProvider) -> list[Any]:
-    """Fetch S3 bucket list once and cache on the provider."""
-    if not hasattr(provider, "_s3_bucket_cache"):
+    """Fetch S3 bucket list once per scan (module-level cache)."""
+    global _bucket_cache  # noqa: PLW0603
+    if _bucket_cache is None:
         s3 = provider.session.client("s3")
-        provider._s3_bucket_cache = s3.list_buckets()["Buckets"]  # type: ignore[attr-defined]
-    return provider._s3_bucket_cache  # type: ignore[attr-defined,no-any-return]
+        _bucket_cache = s3.list_buckets()["Buckets"]
+    return _bucket_cache
 
 
 def check_public_buckets(provider: AWSProvider) -> CheckResult:
@@ -83,22 +95,25 @@ def check_public_buckets(provider: AWSProvider) -> CheckResult:
                             compliance_refs=["CIS 2.1.5"],
                         )
                     )
-            except s3.exceptions.ClientError:
-                # No public access block configured at all
-                result.findings.append(
-                    Finding(
-                        check_id="aws-s3-001",
-                        title=f"S3 bucket '{name}' has no public access block",
-                        severity=Severity.HIGH,
-                        category=Category.SECURITY,
-                        resource_type="AWS::S3::Bucket",
-                        resource_id=name,
-                        description=f"Bucket '{name}' does not have a public access block configuration.",
-                        recommendation="Add a public access block to the bucket with all four settings enabled.",
-                        remediation=_s3_public_access_remediation(name),
-                        compliance_refs=["CIS 2.1.5"],
+            except Exception as exc:
+                error_code = getattr(exc, "response", {}).get("Error", {}).get("Code", "")
+                if error_code == "NoSuchPublicAccessBlockConfiguration":
+                    # No public access block configured at all
+                    result.findings.append(
+                        Finding(
+                            check_id="aws-s3-001",
+                            title=f"S3 bucket '{name}' has no public access block",
+                            severity=Severity.HIGH,
+                            category=Category.SECURITY,
+                            resource_type="AWS::S3::Bucket",
+                            resource_id=name,
+                            description=f"Bucket '{name}' does not have a public access block configuration.",
+                            recommendation="Add a public access block to the bucket with all four settings enabled.",
+                            remediation=_s3_public_access_remediation(name),
+                            compliance_refs=["CIS 2.1.5"],
+                        )
                     )
-                )
+                # AccessDenied or other errors: skip (don't produce false positive)
     except Exception as e:
         result.error = str(e)
 
@@ -119,7 +134,8 @@ def check_bucket_encryption(provider: AWSProvider) -> CheckResult:
             try:
                 s3.get_bucket_encryption(Bucket=name)
             except s3.exceptions.ClientError as e:
-                if "ServerSideEncryptionConfigurationNotFoundError" in str(e):
+                error_code = e.response.get("Error", {}).get("Code", "")
+                if error_code == "ServerSideEncryptionConfigurationNotFoundError":
                     result.findings.append(
                         Finding(
                             check_id="aws-s3-002",
@@ -204,6 +220,34 @@ def check_bucket_versioning(provider: AWSProvider) -> CheckResult:
     return result
 
 
+def _lifecycle_remediation(name: str) -> Remediation:
+    """Build remediation for missing/disabled lifecycle rules."""
+    return Remediation(
+        cli=(
+            f"aws s3api put-bucket-lifecycle-configuration --bucket {name} "
+            f"--lifecycle-configuration '{{"
+            f'"Rules":[{{"ID":"auto-archive","Status":"Enabled",'
+            f'"Transitions":[{{"Days":90,"StorageClass":"GLACIER"}}],'
+            f'"Filter":{{"Prefix":""}}}}]}}\''
+        ),
+        terraform=(
+            f'resource "aws_s3_bucket_lifecycle_configuration" "{_tf_name(name)}" {{\n'
+            f'  bucket = "{name}"\n'
+            f"  rule {{\n"
+            f'    id     = "auto-archive"\n'
+            f'    status = "Enabled"\n'
+            f"    transition {{\n"
+            f"      days          = 90\n"
+            f'      storage_class = "GLACIER"\n'
+            f"    }}\n"
+            f"  }}\n"
+            f"}}"
+        ),
+        doc_url="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lifecycle-mgmt.html",
+        effort=Effort.LOW,
+    )
+
+
 def check_bucket_lifecycle(provider: AWSProvider) -> CheckResult:
     """Check if S3 buckets have lifecycle rules configured."""
     s3 = provider.session.client("s3")
@@ -230,30 +274,7 @@ def check_bucket_lifecycle(provider: AWSProvider) -> CheckResult:
                             resource_id=name,
                             description=f"Bucket '{name}' has lifecycle rules but none are enabled. Old or incomplete objects accumulate cost.",
                             recommendation="Enable lifecycle rules to transition or expire objects automatically.",
-                            remediation=Remediation(
-                                cli=(
-                                    f"aws s3api put-bucket-lifecycle-configuration --bucket {name} "
-                                    f"--lifecycle-configuration '{{"
-                                    f'"Rules":[{{"ID":"auto-archive","Status":"Enabled",'
-                                    f'"Transitions":[{{"Days":90,"StorageClass":"GLACIER"}}],'
-                                    f'"Filter":{{"Prefix":""}}}}]}}\''
-                                ),
-                                terraform=(
-                                    f'resource "aws_s3_bucket_lifecycle_configuration" "{_tf_name(name)}" {{\n'
-                                    f'  bucket = "{name}"\n'
-                                    f"  rule {{\n"
-                                    f'    id     = "auto-archive"\n'
-                                    f'    status = "Enabled"\n'
-                                    f"    transition {{\n"
-                                    f"      days          = 90\n"
-                                    f'      storage_class = "GLACIER"\n'
-                                    f"    }}\n"
-                                    f"  }}\n"
-                                    f"}}"
-                                ),
-                                doc_url="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lifecycle-mgmt.html",
-                                effort=Effort.LOW,
-                            ),
+                            remediation=_lifecycle_remediation(name),
                         )
                     )
             except Exception as exc:
@@ -269,30 +290,7 @@ def check_bucket_lifecycle(provider: AWSProvider) -> CheckResult:
                             resource_id=name,
                             description=f"Bucket '{name}' has no lifecycle configuration. Objects never expire or transition to cheaper storage.",
                             recommendation="Add lifecycle rules to transition old objects to Glacier or expire them.",
-                            remediation=Remediation(
-                                cli=(
-                                    f"aws s3api put-bucket-lifecycle-configuration --bucket {name} "
-                                    f"--lifecycle-configuration '{{"
-                                    f'"Rules":[{{"ID":"auto-archive","Status":"Enabled",'
-                                    f'"Transitions":[{{"Days":90,"StorageClass":"GLACIER"}}],'
-                                    f'"Filter":{{"Prefix":""}}}}]}}\''
-                                ),
-                                terraform=(
-                                    f'resource "aws_s3_bucket_lifecycle_configuration" "{_tf_name(name)}" {{\n'
-                                    f'  bucket = "{name}"\n'
-                                    f"  rule {{\n"
-                                    f'    id     = "auto-archive"\n'
-                                    f'    status = "Enabled"\n'
-                                    f"    transition {{\n"
-                                    f"      days          = 90\n"
-                                    f'      storage_class = "GLACIER"\n'
-                                    f"    }}\n"
-                                    f"  }}\n"
-                                    f"}}"
-                                ),
-                                doc_url="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lifecycle-mgmt.html",
-                                effort=Effort.LOW,
-                            ),
+                            remediation=_lifecycle_remediation(name),
                         )
                     )
                 else:
@@ -355,15 +353,12 @@ def check_access_logging(provider: AWSProvider) -> CheckResult:
 
 def get_checks(provider: AWSProvider) -> list[CheckFn]:
     """Return all S3 checks bound to the provider."""
-    checks: list[CheckFn] = [
-        partial(check_public_buckets, provider),
-        partial(check_bucket_encryption, provider),
-        partial(check_bucket_versioning, provider),
-        partial(check_bucket_lifecycle, provider),
-        partial(check_access_logging, provider),
+    from cloud_audit.providers.base import make_check
+
+    return [
+        make_check(check_public_buckets, provider, check_id="aws-s3-001", category=Category.SECURITY),
+        make_check(check_bucket_encryption, provider, check_id="aws-s3-002", category=Category.SECURITY),
+        make_check(check_bucket_versioning, provider, check_id="aws-s3-003", category=Category.RELIABILITY),
+        make_check(check_bucket_lifecycle, provider, check_id="aws-s3-004", category=Category.COST),
+        make_check(check_access_logging, provider, check_id="aws-s3-005", category=Category.SECURITY),
     ]
-    for fn in checks:
-        fn.category = Category.SECURITY
-    checks[2].category = Category.RELIABILITY
-    checks[3].category = Category.COST
-    return checks

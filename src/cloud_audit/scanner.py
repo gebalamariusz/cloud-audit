@@ -9,11 +9,11 @@ from typing import TYPE_CHECKING
 from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
-from cloud_audit.models import ScanReport, Severity
+from cloud_audit.models import CheckResult, ScanReport, Severity
 
 if TYPE_CHECKING:
     from cloud_audit.config import CloudAuditConfig
-    from cloud_audit.providers.base import BaseProvider
+    from cloud_audit.providers.base import BaseProvider, CheckFn
 
 console = Console()
 
@@ -49,6 +49,32 @@ def _apply_min_severity(report: ScanReport, min_severity: Severity) -> None:
         check_result.findings = [f for f in check_result.findings if _SEVERITY_ORDER.index(f.severity) <= min_idx]
 
 
+def _get_check_id(check_fn: object) -> str:
+    """Extract check_id from a check function (partial with metadata or plain callable)."""
+    # Prefer explicit .check_id attribute (set by make_check)
+    check_id = getattr(check_fn, "check_id", None)
+    if check_id:
+        return str(check_id)
+    # Fallback: function name from partial
+    if hasattr(check_fn, "func"):
+        return str(check_fn.func.__name__)
+    return str(getattr(check_fn, "__name__", "unknown"))
+
+
+def _execute_check(check_fn: CheckFn) -> CheckResult:
+    """Execute a single check, catching exceptions into CheckResult.error."""
+    try:
+        result: CheckResult = check_fn()
+        return result
+    except Exception as e:
+        check_id = _get_check_id(check_fn)
+        return CheckResult(
+            check_id=check_id,
+            check_name=check_id,
+            error=str(e),
+        )
+
+
 def run_scan(
     provider: BaseProvider,
     categories: list[str] | None = None,
@@ -75,6 +101,10 @@ def run_scan(
 
     checks = provider.get_checks(categories=categories)
 
+    # Pre-filter: skip excluded checks before making any API calls
+    if exclude_checks:
+        checks = [c for c in checks if _get_check_id(c) not in exclude_checks]
+
     if not checks:
         if not quiet:
             console.print("[yellow]No checks to run.[/yellow]")
@@ -83,24 +113,16 @@ def run_scan(
     if not quiet:
         console.print(f"\n[bold]Running {len(checks)} checks on {report.provider.upper()}...[/bold]\n")
 
+    # Reset per-scan caches
+    from cloud_audit.providers.aws.checks.s3 import _reset_bucket_cache
+
+    _reset_bucket_cache()
+
     start = time.monotonic()
 
     if quiet:
         for check_fn in checks:
-            try:
-                result = check_fn()
-                report.results.append(result)
-            except Exception as e:
-                from cloud_audit.models import CheckResult
-
-                check_id = getattr(check_fn, "__name__", "unknown")
-                report.results.append(
-                    CheckResult(
-                        check_id=check_id,
-                        check_name=check_id,
-                        error=str(e),
-                    )
-                )
+            report.results.append(_execute_check(check_fn))
     else:
         with Progress(
             SpinnerColumn(),
@@ -113,28 +135,10 @@ def run_scan(
             task = progress.add_task("Scanning", total=len(checks))
 
             for check_fn in checks:
-                try:
-                    result = check_fn()
-                    report.results.append(result)
-                except Exception as e:
-                    from cloud_audit.models import CheckResult
-
-                    check_id = getattr(check_fn, "__name__", "unknown")
-                    report.results.append(
-                        CheckResult(
-                            check_id=check_id,
-                            check_name=check_id,
-                            error=str(e),
-                        )
-                    )
-
+                report.results.append(_execute_check(check_fn))
                 progress.advance(task)
 
     report.duration_seconds = round(time.monotonic() - start, 2)
-
-    # Post-scan: remove excluded check results
-    if exclude_checks:
-        report.results = [r for r in report.results if r.check_id not in exclude_checks]
 
     # Post-scan: apply suppressions
     suppressed_count = 0

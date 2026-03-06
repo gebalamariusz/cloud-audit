@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from functools import partial
 from typing import TYPE_CHECKING
 
 from cloud_audit.models import Category, CheckResult, Effort, Finding, Remediation, Severity
@@ -31,10 +30,12 @@ def check_default_vpc_in_use(provider: AWSProvider) -> CheckResult:
                 ]
 
                 if enis:
+                    eni_count = len(enis)
+                    count_prefix = "at least " if eni_count >= 1000 else ""
                     result.findings.append(
                         Finding(
                             check_id="aws-vpc-001",
-                            title=f"Default VPC in {region} has {len(enis)} network interface(s)",
+                            title=f"Default VPC in {region} has {count_prefix}{eni_count} network interface(s)",
                             severity=Severity.MEDIUM,
                             category=Category.SECURITY,
                             resource_type="AWS::EC2::VPC",
@@ -118,6 +119,16 @@ def check_open_security_groups(provider: AWSProvider) -> CheckResult:
 
                         # Check if all traffic is allowed
                         if rule.get("IpProtocol") == "-1":
+                            # Build revoke commands for each open CIDR (IPv4 and IPv6 separately)
+                            revoke_cmds = []
+                            if "0.0.0.0/0" in open_cidrs:
+                                revoke_cmds.append(
+                                    f"aws ec2 revoke-security-group-ingress --group-id {sg_id} --protocol -1 --cidr 0.0.0.0/0 --region {region}"
+                                )
+                            if "::/0" in open_cidrs:
+                                revoke_cmds.append(
+                                    f"aws ec2 revoke-security-group-ingress --group-id {sg_id} --ip-permissions IpProtocol=-1,Ipv6Ranges=[{{CidrIpv6=::/0}}] --region {region}"
+                                )
                             result.findings.append(
                                 Finding(
                                     check_id="aws-vpc-002",
@@ -130,7 +141,7 @@ def check_open_security_groups(provider: AWSProvider) -> CheckResult:
                                     description=f"Security group {sg_id} ({sg_name}) allows all inbound traffic from {cidr_display}.",
                                     recommendation="Restrict inbound rules to specific ports and source IP ranges.",
                                     remediation=Remediation(
-                                        cli=f"aws ec2 revoke-security-group-ingress --group-id {sg_id} --protocol -1 --cidr 0.0.0.0/0 --region {region}",
+                                        cli="\n".join(revoke_cmds),
                                         terraform=(
                                             f"# Restrict to specific ports and IPs:\n"
                                             f'resource "aws_security_group_rule" "restrict" {{\n'
@@ -150,39 +161,59 @@ def check_open_security_groups(provider: AWSProvider) -> CheckResult:
                             )
                             continue
 
-                        # Check sensitive ports
-                        for port, service in sensitive_ports.items():
-                            if from_port <= port <= to_port:
-                                result.findings.append(
-                                    Finding(
-                                        check_id="aws-vpc-002",
-                                        title=f"Security group '{sg_name}' exposes {service} (port {port}) to internet",
-                                        severity=Severity.CRITICAL if port in (22, 3389, 3306, 5432) else Severity.HIGH,
-                                        category=Category.SECURITY,
-                                        resource_type="AWS::EC2::SecurityGroup",
-                                        resource_id=sg_id,
-                                        region=region,
-                                        description=f"Security group {sg_id} ({sg_name}) allows inbound {service} (port {port}) from {cidr_display}.",
-                                        recommendation=f"Restrict {service} access to specific IP ranges. Use a bastion host or VPN for remote access.",
-                                        remediation=Remediation(
-                                            cli=f"aws ec2 revoke-security-group-ingress --group-id {sg_id} --protocol tcp --port {port} --cidr 0.0.0.0/0 --region {region}",
-                                            terraform=(
-                                                f"# Restrict {service} access to known IPs:\n"
-                                                f'resource "aws_security_group_rule" "{service.lower()}" {{\n'
-                                                f'  type              = "ingress"\n'
-                                                f'  security_group_id = "{sg_id}"\n'
-                                                f"  from_port         = {port}\n"
-                                                f"  to_port           = {port}\n"
-                                                f'  protocol          = "tcp"\n'
-                                                f'  cidr_blocks       = ["YOUR_VPN_IP/32"]\n'
-                                                f"}}"
-                                            ),
-                                            doc_url="https://docs.aws.amazon.com/vpc/latest/userguide/security-group-rules.html",
-                                            effort=Effort.LOW,
-                                        ),
-                                        compliance_refs=["CIS 5.2"],
-                                    )
+                        # Check sensitive ports — report only the highest-severity match per rule
+                        exposed = [
+                            (port, service) for port, service in sensitive_ports.items() if from_port <= port <= to_port
+                        ]
+                        if exposed:
+                            # Pick the most critical port for the primary finding
+                            critical_ports = {22, 3389, 3306, 5432}
+                            best_port, best_service = next(
+                                ((p, s) for p, s in exposed if p in critical_ports),
+                                exposed[0],
+                            )
+                            severity = Severity.CRITICAL if best_port in critical_ports else Severity.HIGH
+                            exposed_names = ", ".join(f"{s} ({p})" for p, s in exposed)
+                            # Build revoke commands for the primary port
+                            revoke_cmds = []
+                            if "0.0.0.0/0" in open_cidrs:
+                                revoke_cmds.append(
+                                    f"aws ec2 revoke-security-group-ingress --group-id {sg_id} --protocol tcp --port {best_port} --cidr 0.0.0.0/0 --region {region}"
                                 )
+                            if "::/0" in open_cidrs:
+                                revoke_cmds.append(
+                                    f"aws ec2 revoke-security-group-ingress --group-id {sg_id} --ip-permissions IpProtocol=tcp,FromPort={best_port},ToPort={best_port},Ipv6Ranges=[{{CidrIpv6=::/0}}] --region {region}"
+                                )
+                            result.findings.append(
+                                Finding(
+                                    check_id="aws-vpc-002",
+                                    title=f"Security group '{sg_name}' exposes {exposed_names} to internet",
+                                    severity=severity,
+                                    category=Category.SECURITY,
+                                    resource_type="AWS::EC2::SecurityGroup",
+                                    resource_id=sg_id,
+                                    region=region,
+                                    description=f"Security group {sg_id} ({sg_name}) allows inbound {exposed_names} from {cidr_display}.",
+                                    recommendation="Restrict access to specific IP ranges. Use a bastion host or VPN for remote access.",
+                                    remediation=Remediation(
+                                        cli="\n".join(revoke_cmds),
+                                        terraform=(
+                                            f"# Restrict access to known IPs:\n"
+                                            f'resource "aws_security_group_rule" "restrict" {{\n'
+                                            f'  type              = "ingress"\n'
+                                            f'  security_group_id = "{sg_id}"\n'
+                                            f"  from_port         = {best_port}\n"
+                                            f"  to_port           = {best_port}\n"
+                                            f'  protocol          = "tcp"\n'
+                                            f'  cidr_blocks       = ["YOUR_VPN_IP/32"]\n'
+                                            f"}}"
+                                        ),
+                                        doc_url="https://docs.aws.amazon.com/vpc/latest/userguide/security-group-rules.html",
+                                        effort=Effort.LOW,
+                                    ),
+                                    compliance_refs=["CIS 5.2"],
+                                )
+                            )
     except Exception as e:
         result.error = str(e)
 
@@ -277,20 +308,33 @@ def check_unrestricted_nacl(provider: AWSProvider) -> CheckResult:
                         continue
 
                     cidr = entry.get("CidrBlock", "")
+                    ipv6_cidr = entry.get("Ipv6CidrBlock", "")
                     protocol = entry.get("Protocol", "")
 
-                    # Protocol "-1" means all traffic, CIDR 0.0.0.0/0 means from anywhere
-                    if cidr == "0.0.0.0/0" and protocol == "-1":
+                    is_internet = cidr == "0.0.0.0/0" or ipv6_cidr == "::/0"
+                    if not is_internet:
+                        continue
+
+                    # Protocol "-1" = all traffic; "6" = TCP, "17" = UDP with full port range
+                    port_range = entry.get("PortRange", {})
+                    is_all_traffic = protocol == "-1"
+                    is_wide_port_range = (
+                        protocol in ("6", "17") and port_range.get("From", 0) == 0 and port_range.get("To", 0) == 65535
+                    )
+
+                    if is_all_traffic or is_wide_port_range:
+                        open_cidr = cidr if cidr == "0.0.0.0/0" else ipv6_cidr
+                        proto_desc = "all traffic" if is_all_traffic else ("all TCP" if protocol == "6" else "all UDP")
                         result.findings.append(
                             Finding(
                                 check_id="aws-vpc-004",
-                                title=f"NACL '{nacl_id}' allows all inbound traffic from 0.0.0.0/0",
+                                title=f"NACL '{nacl_id}' allows {proto_desc} inbound from {open_cidr}",
                                 severity=Severity.MEDIUM,
                                 category=Category.SECURITY,
                                 resource_type="AWS::EC2::NetworkAcl",
                                 resource_id=nacl_id,
                                 region=region,
-                                description=f"Network ACL {nacl_id} has an inbound rule allowing all protocols from 0.0.0.0/0. This bypasses security group restrictions at the subnet level.",
+                                description=f"Network ACL {nacl_id} has an inbound rule allowing {proto_desc} from {open_cidr}. This bypasses security group restrictions at the subnet level.",
                                 recommendation="Restrict NACL inbound rules to specific ports and IP ranges needed for your workloads.",
                                 remediation=Remediation(
                                     cli=(
@@ -325,12 +369,11 @@ def check_unrestricted_nacl(provider: AWSProvider) -> CheckResult:
 
 def get_checks(provider: AWSProvider) -> list[CheckFn]:
     """Return all VPC checks bound to the provider."""
-    checks: list[CheckFn] = [
-        partial(check_default_vpc_in_use, provider),
-        partial(check_open_security_groups, provider),
-        partial(check_vpc_flow_logs, provider),
-        partial(check_unrestricted_nacl, provider),
+    from cloud_audit.providers.base import make_check
+
+    return [
+        make_check(check_default_vpc_in_use, provider, check_id="aws-vpc-001", category=Category.SECURITY),
+        make_check(check_open_security_groups, provider, check_id="aws-vpc-002", category=Category.SECURITY),
+        make_check(check_vpc_flow_logs, provider, check_id="aws-vpc-003", category=Category.SECURITY),
+        make_check(check_unrestricted_nacl, provider, check_id="aws-vpc-004", category=Category.SECURITY),
     ]
-    for fn in checks:
-        fn.category = Category.SECURITY
-    return checks

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from functools import partial
 from typing import TYPE_CHECKING
 
 from cloud_audit.models import Category, CheckResult, Effort, Finding, Remediation, Severity
@@ -215,14 +214,11 @@ def check_rds_auto_minor_upgrade(provider: AWSProvider) -> CheckResult:
 
 def get_checks(provider: AWSProvider) -> list[CheckFn]:
     """Return all RDS checks bound to the provider."""
-    checks: list[CheckFn] = [
-        partial(check_rds_public_access, provider),
-        partial(check_rds_encryption, provider),
-        partial(check_rds_multi_az, provider),
-        partial(check_rds_auto_minor_upgrade, provider),
+    from cloud_audit.providers.base import make_check
+
+    return [
+        make_check(check_rds_public_access, provider, check_id="aws-rds-001", category=Category.SECURITY),
+        make_check(check_rds_encryption, provider, check_id="aws-rds-002", category=Category.SECURITY),
+        make_check(check_rds_multi_az, provider, check_id="aws-rds-003", category=Category.RELIABILITY),
+        make_check(check_rds_auto_minor_upgrade, provider, check_id="aws-rds-004", category=Category.RELIABILITY),
     ]
-    for fn in checks:
-        fn.category = Category.SECURITY
-    checks[2].category = Category.RELIABILITY
-    checks[3].category = Category.RELIABILITY
-    return checks

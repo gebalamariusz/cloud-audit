@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from functools import partial
 from typing import TYPE_CHECKING
 
 from cloud_audit.models import Category, CheckResult, Effort, Finding, Remediation, Severity
@@ -154,11 +153,9 @@ def check_unused_secret(provider: AWSProvider) -> CheckResult:
 
 def get_checks(provider: AWSProvider) -> list[CheckFn]:
     """Return all Secrets Manager checks bound to the provider."""
-    checks: list[CheckFn] = [
-        partial(check_secret_rotation, provider),
-        partial(check_unused_secret, provider),
+    from cloud_audit.providers.base import make_check
+
+    return [
+        make_check(check_secret_rotation, provider, check_id="aws-sm-001", category=Category.SECURITY),
+        make_check(check_unused_secret, provider, check_id="aws-sm-002", category=Category.COST),
     ]
-    for fn in checks:
-        fn.category = Category.SECURITY
-    checks[1].category = Category.COST
-    return checks
