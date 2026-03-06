@@ -1,6 +1,6 @@
 # Roadmap
 
-> Current version: **v0.5.1** (March 2026)
+> Current version: **v0.6.0** (March 2026)
 
 ## Completed
 
@@ -45,6 +45,17 @@
 - OIDC authentication support for GitHub Actions
 - 3 additional checks (NACL, termination protection, RDS auto-upgrade)
 - Total: 45 checks, 170+ tests
+
+### v0.6.0 -- Security Hardening
+- Jinja2 minimum bumped to >=3.1.6 (CVE-2025-27516)
+- Shell injection protection in `--export-fixes` output and remediation commands
+- Dockerfile hardened (non-root user, pinned base image digest)
+- SHA-pinned GitHub Actions in CI/CD workflows
+- `make_check()` helper for consistent check registration
+- ECS/GuardDuty pagination fixes, SG deduplication, NACL TCP/UDP detection
+- S3 bucket cache with proper reset between scans
+- SARIF, HTML, and Markdown report fixes
+- 173 tests passing
 
 ## In Progress
 
