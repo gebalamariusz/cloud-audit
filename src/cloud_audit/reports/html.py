@@ -167,5 +167,6 @@ def render_html(report: ScanReport) -> str:
         priority_groups=priority_groups,
         cis_status=cis_status,
         attack_chains=report.attack_chains,
+        root_causes=report.root_causes,
         logo_base64=logo_base64,
     )

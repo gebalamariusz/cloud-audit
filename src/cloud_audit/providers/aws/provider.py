@@ -11,6 +11,7 @@ from botocore.config import Config
 from cloud_audit.providers.aws.checks import (
     account,
     backup,
+    bedrock,
     cloudtrail,
     cloudwatch,
     config_,
@@ -25,6 +26,7 @@ from cloud_audit.providers.aws.checks import (
     lambda_,
     rds,
     s3,
+    sagemaker,
     secrets,
     securityhub,
     ssm,
@@ -61,6 +63,8 @@ _CHECK_MODULES = [
     backup,
     inspector,
     waf,
+    bedrock,
+    sagemaker,
 ]
 
 
@@ -90,6 +94,7 @@ class AWSProvider(BaseProvider):
         self._sts = self._session.client("sts", config=_BOTO_CONFIG)
         self._clients: dict[tuple[str, str | None], Any] = {}
         self._clients_lock = threading.Lock()
+        self._account_id: str | None = None
 
         if regions and regions == ["all"]:
             ec2 = self._session.client("ec2", region_name=self._session.region_name or "eu-central-1")
@@ -123,8 +128,10 @@ class AWSProvider(BaseProvider):
             return self._clients[key]
 
     def get_account_id(self) -> str:
-        identity = self._sts.get_caller_identity()
-        return str(identity["Account"])
+        if self._account_id is None:
+            identity = self._sts.get_caller_identity()
+            self._account_id = str(identity["Account"])
+        return self._account_id
 
     def get_provider_name(self) -> str:
         return "aws"
@@ -133,9 +140,11 @@ class AWSProvider(BaseProvider):
         """Reset per-scan caches for all AWS check modules."""
         from cloud_audit.providers.aws.checks.cloudtrail import _reset_trail_cache
         from cloud_audit.providers.aws.checks.s3 import _reset_bucket_cache
+        from cloud_audit.providers.aws.iam_analyzer import _reset_escalation_cache
 
         _reset_bucket_cache()
         _reset_trail_cache()
+        _reset_escalation_cache()
 
     def get_checks(self, categories: list[str] | None = None) -> list[CheckFn]:
         checks: list[CheckFn] = []

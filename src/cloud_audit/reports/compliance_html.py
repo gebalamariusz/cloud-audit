@@ -242,7 +242,7 @@ h2 {{ color: var(--text-bright); margin: 1.5rem 0 1rem; border-bottom: 1px solid
 
 <div class="header">
     <div class="score-ring" role="meter" aria-valuenow="{score:.0f}" aria-valuemin="0" aria-valuemax="100">{score:.0f}%</div>
-    <h1>{_esc(cr.framework_name)}</h1>
+    <h1>{_esc(cr.framework_name)}{"&nbsp;<span style='font-size:0.5em;background:rgba(234,179,8,0.15);color:var(--partial);padding:2px 10px;border-radius:4px;vertical-align:middle;'>BETA</span>" if cr.status == "beta" else ""}</h1>
     <div style="color: var(--text-dim);">Version {_esc(cr.version)} - Compliance Assessment Report</div>
     <div class="meta">
         <span>Account: {_esc(scan.account_id)}</span>

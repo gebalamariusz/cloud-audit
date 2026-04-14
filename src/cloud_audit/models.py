@@ -114,11 +114,51 @@ class AttackChain(BaseModel):
     viz_steps: list[VizStep] = Field(default_factory=list, description="Visualization steps for attack path graph")
 
 
+class EscalationCategory(str, Enum):
+    """Categories of IAM privilege escalation."""
+
+    IAM_SELF_MUTATION = "iam_self_mutation"
+    CREDENTIAL_ACCESS = "credential_access"
+    PASSROLE_SERVICE = "passrole_service"
+    LAMBDA_CODE_MOD = "lambda_code_modification"
+    TRUST_POLICY_ABUSE = "trust_policy_abuse"
+    PERMISSION_BOUNDARY = "permission_boundary_bypass"
+
+
+class EscalationPath(BaseModel):
+    """A detected IAM privilege escalation path."""
+
+    principal_arn: str = Field(description="ARN of the principal that can escalate")
+    principal_name: str = Field(description="Human-readable name (user/role name)")
+    principal_type: str = Field(description="'User' or 'Role'")
+    method: str = Field(description="Escalation method, e.g. 'CreatePolicyVersion'")
+    category: EscalationCategory
+    required_actions: list[str] = Field(description="IAM actions needed for this path")
+    target_privilege: str = Field(description="What privilege is gained")
+    severity: Severity
+    resource_constraints: list[str] = Field(
+        default_factory=list, description="Resource ARN constraints (empty = wildcard)"
+    )
+
+
+class RootCauseFix(BaseModel):
+    """A single root-cause fix that breaks multiple attack chains."""
+
+    check_id: str = Field(description="Check that produced the findings, e.g. 'aws-vpc-002'")
+    fix_title: str = Field(description="Human-readable fix name, e.g. 'Restrict security groups'")
+    effort: Effort = Field(description="Estimated remediation effort")
+    findings_closed: int = Field(description="Number of findings this fix resolves")
+    chains_broken: list[str] = Field(description="Chain IDs broken by this fix, e.g. ['AC-01', 'AC-02']")
+    remediation: Remediation | None = Field(default=None, description="CLI + Terraform fix")
+    total_risk_reduced: CostEstimateData | None = Field(default=None, description="Aggregate risk reduced")
+
+
 class ScanSummary(BaseModel):
     """Aggregated summary of a full scan."""
 
     total_findings: int = 0
     attack_chains_detected: int = 0
+    escalation_paths_detected: int = 0
     by_severity: dict[Severity, int] = Field(default_factory=dict)
     by_category: dict[Category, int] = Field(default_factory=dict)
     resources_scanned: int = 0
@@ -140,6 +180,8 @@ class ScanReport(BaseModel):
     summary: ScanSummary = Field(default_factory=ScanSummary)
     results: list[CheckResult] = Field(default_factory=list)
     attack_chains: list[AttackChain] = Field(default_factory=list)
+    root_causes: list[RootCauseFix] = Field(default_factory=list)
+    escalation_paths: list[EscalationPath] = Field(default_factory=list)
 
     @property
     def all_findings(self) -> list[Finding]:

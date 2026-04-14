@@ -36,6 +36,8 @@ class ResourceRelationships:
     lambda_roles: dict[str, str] = field(default_factory=dict)
     # IAM role name -> set of attached managed policy ARNs
     role_policies: dict[str, set[str]] = field(default_factory=dict)
+    # IAM escalation paths (populated from iam_analyzer cache)
+    escalation_paths: list[object] = field(default_factory=list)
 
 
 # Well-known AWS managed policy ARNs for permission classification
@@ -1186,7 +1188,7 @@ def _detect_cloudtrail_blind_spot(
     chains.append(
         AttackChain(
             chain_id="AC-32",
-            name="CloudTrail Blind Spot — Alarms Non-Functional",
+            name="CloudTrail Blind Spot - Alarms Non-Functional",
             severity=Severity.HIGH,
             findings=[no_cw_integration[0], no_root_alarm[0]],
             attack_narrative=(
@@ -1253,6 +1255,241 @@ def _detect_all_public_vpc_no_segmentation(
 # Main detection function
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# IAM Privilege Escalation chain rules (AC-34 through AC-36)
+# ---------------------------------------------------------------------------
+
+
+def _detect_iam_self_escalation(by_check: dict[str, list[Finding]]) -> list[AttackChain]:
+    """AC-35: Principal can self-escalate via IAM policy modification."""
+    escalation_findings = by_check.get("aws-iam-018", [])
+    if not escalation_findings:
+        return []
+
+    # Filter for self-mutation category
+    self_mutation = [
+        f
+        for f in escalation_findings
+        if "self_mutation" in f.description.lower()
+        or "CreatePolicyVersion" in f.title
+        or "AttachUserPolicy" in f.title
+        or "AttachGroupPolicy" in f.title
+        or "AttachRolePolicy" in f.title
+        or "PutUserPolicy" in f.title
+        or "PutGroupPolicy" in f.title
+        or "PutRolePolicy" in f.title
+        or "SetDefaultPolicyVersion" in f.title
+    ]
+    if not self_mutation:
+        return []
+
+    chains: list[AttackChain] = []
+    # Group by principal
+    by_principal: dict[str, list[Finding]] = {}
+    for f in self_mutation:
+        by_principal.setdefault(f.resource_id, []).append(f)
+
+    for principal_arn, findings in by_principal.items():
+        methods = ", ".join(f.title.split("via ")[-1] if "via " in f.title else "policy modification" for f in findings)
+        name = findings[0].resource_id.split("/")[-1] if "/" in findings[0].resource_id else findings[0].resource_id
+        chains.append(
+            AttackChain(
+                chain_id="AC-35",
+                name=f"Self-Escalation to Admin ({name})",
+                severity=Severity.CRITICAL,
+                findings=findings,
+                attack_narrative=(
+                    f"Principal '{name}' can modify IAM policies to grant itself admin access "
+                    f"via: {methods}. No additional permissions or services needed - "
+                    f"a single API call is sufficient for full account takeover."
+                ),
+                priority_fix=f"Remove dangerous IAM mutation permissions from '{name}'",
+                mitre_refs=["T1098.001"],
+                resources=[principal_arn],
+            )
+        )
+
+    return chains
+
+
+def _detect_passrole_escalation(by_check: dict[str, list[Finding]]) -> list[AttackChain]:
+    """AC-34: Principal can escalate via PassRole + service exploitation."""
+    escalation_findings = by_check.get("aws-iam-018", [])
+    if not escalation_findings:
+        return []
+
+    passrole = [f for f in escalation_findings if "PassRole" in f.title]
+    if not passrole:
+        return []
+
+    chains: list[AttackChain] = []
+    by_principal: dict[str, list[Finding]] = {}
+    for f in passrole:
+        by_principal.setdefault(f.resource_id, []).append(f)
+
+    for principal_arn, findings in by_principal.items():
+        name = findings[0].resource_id.split("/")[-1] if "/" in findings[0].resource_id else findings[0].resource_id
+        services = ", ".join(f.title.split("via ")[-1] if "via " in f.title else "service" for f in findings)
+        chains.append(
+            AttackChain(
+                chain_id="AC-34",
+                name=f"PassRole Escalation to Admin ({name})",
+                severity=Severity.CRITICAL,
+                findings=findings,
+                attack_narrative=(
+                    f"Principal '{name}' has iam:PassRole and can create resources with privileged "
+                    f"roles via: {services}. The attacker passes an admin role to a service, "
+                    f"then uses that service to execute code with admin privileges."
+                ),
+                priority_fix=f"Scope iam:PassRole for '{name}' to specific role ARNs",
+                mitre_refs=["T1098.001", "T1078.004"],
+                resources=[principal_arn],
+            )
+        )
+
+    return chains
+
+
+def _detect_oidc_escalation(by_check: dict[str, list[Finding]]) -> list[AttackChain]:
+    """AC-36: OIDC role without sub condition + escalation path = external admin."""
+    oidc_findings = by_check.get("aws-iam-007", [])
+    escalation_findings = by_check.get("aws-iam-018", [])
+    if not oidc_findings or not escalation_findings:
+        return []
+
+    # Find OIDC roles that also have escalation paths
+    oidc_roles = {f.resource_id for f in oidc_findings}
+    escalation_for_oidc = [f for f in escalation_findings if f.resource_id in oidc_roles]
+    if not escalation_for_oidc:
+        return []
+
+    chains: list[AttackChain] = []
+    by_role: dict[str, list[Finding]] = {}
+    for f in escalation_for_oidc:
+        by_role.setdefault(f.resource_id, []).append(f)
+
+    for role_arn, findings in by_role.items():
+        role_name = role_arn.split("/")[-1] if "/" in role_arn else role_arn
+        oidc_finding = next((f for f in oidc_findings if f.resource_id == role_arn), None)
+        all_findings = ([oidc_finding] if oidc_finding else []) + findings
+        chains.append(
+            AttackChain(
+                chain_id="AC-36",
+                name=f"External Escalation via OIDC ({role_name})",
+                severity=Severity.CRITICAL,
+                findings=all_findings,
+                attack_narrative=(
+                    f"Role '{role_name}' trusts an OIDC provider without restricting the 'sub' "
+                    f"claim (any repo can assume it) AND the role has privilege escalation paths. "
+                    f"An external attacker compromises any repo → assumes the role → escalates to admin."
+                ),
+                priority_fix=f"Add 'sub' condition to OIDC trust policy on '{role_name}'",
+                mitre_refs=["T1078.004", "T1098.001"],
+                resources=[role_arn],
+            )
+        )
+
+    return chains
+
+
+# ---------------------------------------------------------------------------
+# AI Security chain rules (AC-37 through AC-39)
+# ---------------------------------------------------------------------------
+
+
+def _detect_ai_model_theft(by_check: dict[str, list[Finding]]) -> list[AttackChain]:
+    """AC-37: SageMaker notebook with root access + internet = AI model theft risk."""
+    root_findings = by_check.get("aws-sagemaker-001", [])
+    internet_findings = by_check.get("aws-sagemaker-002", [])
+    if not root_findings or not internet_findings:
+        return []
+
+    # Match by region
+    root_regions = {f.region for f in root_findings}
+    internet_regions = {f.region for f in internet_findings}
+    overlap = root_regions & internet_regions
+    if not overlap:
+        return []
+
+    combined = [f for f in root_findings + internet_findings if f.region in overlap]
+    return [
+        AttackChain(
+            chain_id="AC-37",
+            name="AI Model Theft via SageMaker",
+            severity=Severity.CRITICAL,
+            findings=combined,
+            attack_narrative=(
+                "SageMaker notebooks have root access AND direct internet access. "
+                "An attacker who gains notebook access can exfiltrate proprietary models, "
+                "training data, and credentials to the internet without restriction."
+            ),
+            priority_fix="Disable root access and direct internet on SageMaker notebooks",
+            mitre_refs=["T1530"],
+            resources=[f.resource_id for f in combined[:3]],
+        )
+    ]
+
+
+def _detect_llmjacking(by_check: dict[str, list[Finding]]) -> list[AttackChain]:
+    """AC-38: Bedrock without logging + no guardrails = LLMjacking risk."""
+    no_logging = by_check.get("aws-bedrock-001", [])
+    no_guardrails = by_check.get("aws-bedrock-002", [])
+    if not no_logging:
+        return []
+
+    # LLMjacking requires at least no logging; guardrails absence amplifies it
+    logging_regions = {f.region for f in no_logging}
+    combined = list(no_logging)
+    if no_guardrails:
+        combined.extend(f for f in no_guardrails if f.region in logging_regions)
+
+    return [
+        AttackChain(
+            chain_id="AC-38",
+            name="LLMjacking - Unauthorized Model Usage",
+            severity=Severity.HIGH,
+            findings=combined,
+            attack_narrative=(
+                "Bedrock model invocation logging is disabled"
+                + (" and no guardrails are configured" if no_guardrails else "")
+                + ". An attacker with stolen credentials can invoke expensive models "
+                "(Claude, Titan) at your expense without detection. "
+                "LLMjacking attacks have cost victims $50K+ in compute charges."
+            ),
+            priority_fix="Enable Bedrock model invocation logging",
+            mitre_refs=["T1496"],
+            resources=[f.resource_id for f in combined[:3]],
+        )
+    ]
+
+
+def _detect_ai_data_poisoning(by_check: dict[str, list[Finding]]) -> list[AttackChain]:
+    """AC-39: SageMaker notebook root + internet + no Bedrock guardrails = data poisoning."""
+    root_nb = by_check.get("aws-sagemaker-001", [])
+    no_guardrails = by_check.get("aws-bedrock-002", [])
+    if not root_nb or not no_guardrails:
+        return []
+
+    combined = root_nb[:2] + no_guardrails[:2]
+    return [
+        AttackChain(
+            chain_id="AC-39",
+            name="AI Data Poisoning via Unguarded Pipeline",
+            severity=Severity.HIGH,
+            findings=combined,
+            attack_narrative=(
+                "SageMaker notebooks have root access (can modify training data) and "
+                "Bedrock has no guardrails (no output validation). An attacker can poison "
+                "training data or model weights and the corrupted output passes through "
+                "to production without content filtering."
+            ),
+            priority_fix="Disable SageMaker root access and configure Bedrock guardrails",
+            mitre_refs=["T1565"],
+            resources=[f.resource_id for f in combined[:3]],
+        )
+    ]
+
+
 # All rule functions in execution order
 _SIMPLE_RULES = [
     _detect_unmonitored_admin,  # AC-09
@@ -1273,6 +1510,12 @@ _SIMPLE_RULES = [
     _detect_exposed_no_waf_no_logs,  # AC-31
     _detect_cloudtrail_blind_spot,  # AC-32
     _detect_all_public_vpc_no_segmentation,  # AC-33
+    _detect_passrole_escalation,  # AC-34
+    _detect_iam_self_escalation,  # AC-35
+    _detect_oidc_escalation,  # AC-36
+    _detect_ai_model_theft,  # AC-37
+    _detect_llmjacking,  # AC-38
+    _detect_ai_data_poisoning,  # AC-39
 ]
 
 _RELATIONSHIP_RULES = [
@@ -1320,6 +1563,7 @@ def detect_attack_chains(
     suppress_map = {
         "AC-09": "AC-10",  # Blind Admin supersedes Unmonitored Admin
         "AC-12": "AC-26",  # Unmonitored Admin Escalation supersedes Admin No MFA
+        "AC-07": "AC-36",  # OIDC + Escalation supersedes plain OIDC
     }
     chains = [c for c in chains if c.chain_id not in suppress_map or suppress_map[c.chain_id] not in chain_ids]
 

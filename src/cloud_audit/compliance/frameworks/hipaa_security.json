@@ -1,6 +1,7 @@
 {
   "framework_id": "hipaa_security",
   "framework_name": "HIPAA Security Rule",
+  "status": "beta",
   "version": "45 CFR Part 164 Subpart C",
   "source_url": "https://www.hhs.gov/hipaa/for-professionals/security/index.html",
   "disclaimer": "This report assists with HIPAA Security Rule compliance readiness assessment for AWS infrastructure. It does not constitute HIPAA compliance certification or replace a formal risk analysis required under §164.308(a)(1). This tool automates assessment of technical safeguard controls; administrative and physical safeguards require separate evaluation. HIPAA compliance is the responsibility of the covered entity or business associate.",

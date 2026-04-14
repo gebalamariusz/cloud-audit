@@ -225,6 +225,7 @@ def check_vpc_flow_logs(provider: AWSProvider) -> CheckResult:
     result = CheckResult(check_id="aws-vpc-003", check_name="VPC flow logs")
 
     try:
+        account_id = provider.get_account_id()
         for region in provider.regions:
             ec2 = provider.session.client("ec2", region_name=region)
             vpcs = ec2.describe_vpcs()["Vpcs"]
@@ -262,10 +263,47 @@ def check_vpc_flow_logs(provider: AWSProvider) -> CheckResult:
                                     f"aws ec2 create-flow-logs --resource-type VPC --resource-ids {vpc_id} "
                                     f"--traffic-type ALL --log-destination-type cloud-watch-logs "
                                     f"--log-group-name /aws/vpc/flow-logs/{vpc_id} "
-                                    f"--deliver-logs-permission-arn arn:aws:iam::ACCOUNT_ID:role/vpc-flow-log-role "
+                                    f"--deliver-logs-permission-arn arn:aws:iam::{account_id}:role/vpc-flow-log-role "
                                     f"--region {region}"
                                 ),
                                 terraform=(
+                                    f'resource "aws_cloudwatch_log_group" "flow_log" {{\n'
+                                    f'  name              = "/aws/vpc/flow-logs/{vpc_id}"\n'
+                                    f"  retention_in_days = 365\n"
+                                    f"}}\n"
+                                    f"\n"
+                                    f'resource "aws_iam_role" "flow_log" {{\n'
+                                    f'  name = "vpc-flow-log-role"\n'
+                                    f"\n"
+                                    f"  assume_role_policy = jsonencode({{\n"
+                                    f'    Version = "2012-10-17"\n'
+                                    f"    Statement = [{{\n"
+                                    f'      Effect = "Allow"\n'
+                                    f'      Principal = {{ Service = "vpc-flow-logs.amazonaws.com" }}\n'
+                                    f'      Action = "sts:AssumeRole"\n'
+                                    f"    }}]\n"
+                                    f"  }})\n"
+                                    f"}}\n"
+                                    f"\n"
+                                    f'resource "aws_iam_role_policy" "flow_log" {{\n'
+                                    f'  name = "vpc-flow-log-policy"\n'
+                                    f"  role = aws_iam_role.flow_log.id\n"
+                                    f"\n"
+                                    f"  policy = jsonencode({{\n"
+                                    f'    Version = "2012-10-17"\n'
+                                    f"    Statement = [{{\n"
+                                    f'      Effect = "Allow"\n'
+                                    f"      Action = [\n"
+                                    f'        "logs:CreateLogStream",\n'
+                                    f'        "logs:PutLogEvents",\n'
+                                    f'        "logs:DescribeLogGroups",\n'
+                                    f'        "logs:DescribeLogStreams"\n'
+                                    f"      ]\n"
+                                    f'      Resource = "${{aws_cloudwatch_log_group.flow_log.arn}}:*"\n'
+                                    f"    }}]\n"
+                                    f"  }})\n"
+                                    f"}}\n"
+                                    f"\n"
                                     f'resource "aws_flow_log" "this" {{\n'
                                     f'  vpc_id          = "{vpc_id}"\n'
                                     f'  traffic_type    = "ALL"\n'

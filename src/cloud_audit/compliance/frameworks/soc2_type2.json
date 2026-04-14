@@ -1,6 +1,7 @@
 {
   "framework_id": "soc2_type2",
   "framework_name": "SOC 2 Type II - Trust Services Criteria",
+  "status": "stable",
   "version": "2017 (Revised 2022)",
   "source_url": "https://www.aicpa-cima.com/resources/download/2017-trust-services-criteria-with-revised-points-of-focus-2022",
   "disclaimer": "This report assists with SOC 2 Type II compliance readiness assessment against AICPA Trust Services Criteria (2017, revised 2022). It does not constitute a SOC 2 audit or replace examination by an AICPA-licensed CPA firm. This tool automates assessment of technical infrastructure controls; organizational, procedural, and governance controls require separate evaluation. 19 of 43 criteria included in this assessment require manual evaluation.",

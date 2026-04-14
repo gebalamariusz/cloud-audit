@@ -1,6 +1,6 @@
 # SOC 2 Type II - Trust Services Criteria
 
-cloud-audit maps 78 of 80 checks to 43 SOC 2 Trust Services Criteria (AICPA 2017, revised 2022). 24 criteria are automated, 19 require manual review (organizational, procedural, and governance controls).
+cloud-audit maps 88 of 94 checks to 43 SOC 2 Trust Services Criteria (AICPA 2017, revised 2022). 24 criteria are automated, 19 require manual review (organizational, procedural, and governance controls).
 
 !!! note "Readiness assessment, not certification"
     SOC 2 compliance requires a formal audit by an AICPA-licensed CPA firm. This tool automates assessment of technical infrastructure controls and generates evidence to support your audit preparation.
@@ -163,7 +163,7 @@ cloud-audit marks these as NOT_ASSESSED with actionable manual steps for each.
 
 ## Attack Chain Integration
 
-All 25 attack chain rules are mapped to SOC 2 controls. When a chain is detected, the compliance report shows which controls it violates:
+All 31 attack chain rules are mapped to SOC 2 controls. When a chain is detected, the compliance report shows which controls it violates:
 
 | Chain | SOC 2 Controls Violated |
 |-------|------------------------|

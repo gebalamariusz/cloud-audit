@@ -103,6 +103,29 @@ _COST_TABLE: dict[str, tuple[int, int, str, str]] = {
         "MITRE ATT&CK documents cloud credential exploitation techniques (see source).",
         _MITRE_CLOUD,
     ),
+    "aws-iam-018": (
+        100_000,
+        2_000_000,
+        "IAM privilege escalation enables full account takeover. "
+        "PMapper found 77% of tested accounts had escalation paths (Bishop Fox, 2024).",
+        _MITRE_CLOUD,
+    ),
+    # AI Security - Bedrock
+    "aws-bedrock-001": (
+        10_000,
+        100_000,
+        "LLMjacking attacks can cost $50K+ in compute charges. "
+        "Without logging, detection is impossible (Sysdig, 2024).",
+        "https://sysdig.com/blog/llmjacking-stolen-cloud-credentials-used-in-new-ai-attack/",
+    ),
+    # AI Security - SageMaker
+    "aws-sagemaker-001": (
+        50_000,
+        500_000,
+        "SageMaker root access enables model theft, data exfiltration, and lateral movement. "
+        "Proprietary ML models are high-value intellectual property.",
+        "https://docs.aws.amazon.com/sagemaker/latest/dg/nbi-root-access.html",
+    ),
     # S3 - data exposure
     "aws-s3-001": (
         100_000,

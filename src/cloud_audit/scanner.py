@@ -216,4 +216,14 @@ def run_scan(
         if not quiet:
             console.print(f"[yellow]Warning: Cost estimation failed: {e}[/yellow]")
 
+    # Root cause grouping (AFTER cost estimation so risk aggregation works)
+    if report.attack_chains:
+        try:
+            from cloud_audit.root_cause import compute_root_causes
+
+            report.root_causes = compute_root_causes(report.all_findings, report.attack_chains)
+        except Exception as e:
+            if not quiet:
+                console.print(f"[yellow]Warning: Root cause grouping failed: {e}[/yellow]")
+
     return report, suppressed_count

@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-04-14
+
+### Added
+
+- **IAM Privilege Escalation Detection** - 25 escalation methods across 6 categories (IAM self-mutation, credential access, PassRole+service, Lambda code modification, trust policy abuse, permission boundary bypass). Replaces dead PMapper as the only maintained open-source IAM escalation scanner
+- **What-If Remediation Simulator** - `cloud-audit simulate --fix aws-vpc-002` shows before/after impact on score, chains, and risk without changing anything in AWS
+- **Security Posture Trend** - `cloud-audit trend` tracks health score, attack chains, and risk over time with sparkline visualization. Scan history auto-saved to `~/.cloud-audit/history/`
+- **AI-SPM (Bedrock + SageMaker)** - 5 new checks: model invocation logging (aws-bedrock-001), guardrails (aws-bedrock-002), notebook root access (aws-sagemaker-001), notebook internet access (aws-sagemaker-002), endpoint encryption (aws-sagemaker-003)
+- **Root Cause Grouping** - "fix 4 things, break 22 chains" prioritization. Groups findings by root cause and ranks by chain-breaking impact
+- **Quick Wins** - CLI section showing LOW-effort fixes that break CRITICAL chains, with copy-paste commands
+- **6 new attack chain rules** - AC-34 (PassRole escalation), AC-35 (IAM self-escalation), AC-36 (OIDC + escalation), AC-37 (AI model theft), AC-38 (LLMjacking), AC-39 (AI data poisoning)
+- Compliance Beta labels for BSI C5, ISO 27001, HIPAA, NIS2 (CIS and SOC 2 remain Stable)
+- `list-frameworks` shows Status column (Stable/Beta)
+
+### Changed
+
+- Remediation CLI commands now inject real AWS account ID (via `provider.get_account_id()`) instead of `ACCOUNT_ID` placeholders
+- Terraform remediation snippets completed with missing dependent resources (IAM roles, S3 buckets, KMS keys, CloudWatch log groups)
+- VPC flow logs Terraform scoped IAM policy to specific log group ARN (was `Resource: *`)
+- `get_account_id()` cached in AWSProvider (1 STS call instead of 10+ per scan)
+- Root cause computation moved after cost estimation (fixes risk aggregation)
+- `get_account_id()` calls moved inside try/except in kms, iam, s3 checks
+
+### Fixed
+
+- Unicode characters (arrows, em-dashes, block characters) replaced with ASCII for Windows cp1250 compatibility
+
 ## [1.3.0] - 2026-04-03
 
 ### Added

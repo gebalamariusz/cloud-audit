@@ -88,6 +88,7 @@ def check_kms_key_policy(provider: AWSProvider) -> CheckResult:
     result = CheckResult(check_id="aws-kms-002", check_name="KMS key policy")
 
     try:
+        account_id = provider.get_account_id()
         for region in provider.regions:
             kms = provider.session.client("kms", region_name=region)
             paginator = kms.get_paginator("list_keys")
@@ -158,7 +159,7 @@ def check_kms_key_policy(provider: AWSProvider) -> CheckResult:
                                             "    Statement = [{\n"
                                             '      Effect    = "Allow"\n'
                                             "      Principal = {\n"
-                                            '        AWS = "arn:aws:iam::ACCOUNT_ID:root"\n'
+                                            f'        AWS = "arn:aws:iam::{account_id}:root"\n'
                                             "      }\n"
                                             '      Action   = "kms:*"\n'
                                             '      Resource = "*"\n'

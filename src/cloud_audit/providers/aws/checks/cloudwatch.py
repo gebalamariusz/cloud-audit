@@ -85,6 +85,10 @@ def check_root_usage_alarm(provider: AWSProvider) -> CheckResult:
                 if found:
                     break
 
+        # Find the CloudTrail log group for remediation
+        ct_lg_name = _find_cloudtrail_log_group(provider, region)
+        ct_lg_display = ct_lg_name if ct_lg_name else "<CLOUDTRAIL_LOG_GROUP>"
+
         if not found:
             result.findings.append(
                 Finding(
@@ -108,7 +112,7 @@ def check_root_usage_alarm(provider: AWSProvider) -> CheckResult:
                         cli=(
                             "# Create metric filter for root usage:\n"
                             "aws logs put-metric-filter \\\n"
-                            "  --log-group-name <CLOUDTRAIL_LOG_GROUP> \\\n"
+                            f"  --log-group-name {ct_lg_display} \\\n"
                             "  --filter-name RootAccountUsage \\\n"
                             "  --filter-pattern "
                             '\'{ $.userIdentity.type = "Root" '
@@ -410,6 +414,8 @@ def _make_monitoring_check(check_def: dict[str, Any]) -> Any:
                     )
 
             if not found:
+                # Use discovered log group name in remediation if available
+                lg_display = lg_name if lg_name else "<CLOUDTRAIL_LOG_GROUP>"
                 result.findings.append(
                     Finding(
                         check_id=check_def["check_id"],
@@ -432,7 +438,7 @@ def _make_monitoring_check(check_def: dict[str, Any]) -> Any:
                             cli=(
                                 f"# Create metric filter:\n"
                                 f"aws logs put-metric-filter \\\n"
-                                f"  --log-group-name <CLOUDTRAIL_LOG_GROUP> \\\n"
+                                f"  --log-group-name {lg_display} \\\n"
                                 f"  --filter-name CIS-{check_def['cis_id']} \\\n"
                                 f"  --filter-pattern '{check_def['filter_pattern']}' \\\n"
                                 f"  --metric-transformations "
@@ -497,6 +503,7 @@ def check_log_group_kms_encryption(provider: AWSProvider) -> CheckResult:
     security_keywords = ("cloudtrail", "vpc")
 
     try:
+        account_id = provider.get_account_id()
         for region in provider.regions:
             logs = provider.session.client("logs", region_name=region)
             paginator = logs.get_paginator("describe_log_groups")
@@ -534,7 +541,7 @@ def check_log_group_kms_encryption(provider: AWSProvider) -> CheckResult:
                                         cli=(
                                             f"aws logs associate-kms-key \\\n"
                                             f"  --log-group-name '{lg_name}' \\\n"
-                                            f"  --kms-key-id arn:aws:kms:{region}:ACCOUNT_ID:key/KEY_ID \\\n"
+                                            f"  --kms-key-id arn:aws:kms:{region}:{account_id}:key/KEY_ID \\\n"
                                             f"  --region {region}"
                                         ),
                                         terraform=(

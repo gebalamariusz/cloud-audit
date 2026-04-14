@@ -760,6 +760,50 @@
   </script>
   {% endif %}
 
+  <!-- Remediation Plan (root cause grouping) -->
+  {% if root_causes %}
+  <div class="remediation-plan-section" style="margin-bottom: 40px;">
+    <h2 class="section-title">Remediation Plan</h2>
+    <p class="attack-chains-subtitle">Fix {{ root_causes|length }} things, break {{ root_causes|map(attribute='chains_broken')|map('list')|sum(start=[])|unique|list|length }} attack chains</p>
+    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+      <thead>
+        <tr style="border-bottom: 1px solid var(--border); text-align: left;">
+          <th style="padding: 10px 12px; width: 30px;">#</th>
+          <th style="padding: 10px 12px;">Fix</th>
+          <th style="padding: 10px 12px; width: 70px;">Effort</th>
+          <th style="padding: 10px 12px; width: 70px; text-align: right;">Chains</th>
+          <th style="padding: 10px 12px; width: 80px; text-align: right;">Findings</th>
+          {% if root_causes|selectattr('total_risk_reduced')|list %}
+          <th style="padding: 10px 12px; width: 130px; text-align: right;">Risk Reduced</th>
+          {% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for rc in root_causes %}
+        <tr style="border-bottom: 1px solid var(--border);">
+          <td style="padding: 10px 12px; color: var(--text-dim);">{{ loop.index }}</td>
+          <td style="padding: 10px 12px; font-weight: 500;">{{ rc.fix_title }}</td>
+          <td style="padding: 10px 12px;">
+            {% if rc.effort.value == 'low' %}
+            <span style="color: var(--green); font-weight: 600; font-size: 11px;">LOW</span>
+            {% elif rc.effort.value == 'medium' %}
+            <span style="color: var(--orange); font-weight: 600; font-size: 11px;">MEDIUM</span>
+            {% else %}
+            <span style="color: var(--red); font-weight: 600; font-size: 11px;">HIGH</span>
+            {% endif %}
+          </td>
+          <td style="padding: 10px 12px; text-align: right; font-weight: 600;">{{ rc.chains_broken|length }}</td>
+          <td style="padding: 10px 12px; text-align: right;">{{ rc.findings_closed }}</td>
+          {% if root_causes|selectattr('total_risk_reduced')|list %}
+          <td style="padding: 10px 12px; text-align: right; color: var(--red); font-weight: 600;">{{ rc.total_risk_reduced.display if rc.total_risk_reduced else '' }}</td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
   <!-- Severity breakdown -->
   <div class="severity-bar">
     {% for sev in severity_order %}

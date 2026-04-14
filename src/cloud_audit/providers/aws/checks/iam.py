@@ -114,6 +114,7 @@ def check_users_mfa(provider: AWSProvider) -> CheckResult:
     result = CheckResult(check_id="aws-iam-002", check_name="IAM users MFA")
 
     try:
+        account_id = provider.get_account_id()
         paginator = iam.get_paginator("list_users")
         for page in paginator.paginate():
             for user in page["Users"]:
@@ -147,7 +148,7 @@ def check_users_mfa(provider: AWSProvider) -> CheckResult:
                                     f"--outfile /tmp/{username}-qr.png --bootstrap-method QRCodePNG\n"
                                     f"# Then activate with two consecutive TOTP codes:\n"
                                     f"aws iam enable-mfa-device --user-name {username} "
-                                    f"--serial-number arn:aws:iam::ACCOUNT_ID:mfa/{username}-mfa "
+                                    f"--serial-number arn:aws:iam::{account_id}:mfa/{username}-mfa "
                                     f"--authentication-code1 CODE1 --authentication-code2 CODE2"
                                 ),
                                 terraform=(
@@ -777,6 +778,7 @@ def check_support_role(provider: AWSProvider) -> CheckResult:
     result = CheckResult(check_id="aws-iam-011", check_name="Support role exists")
 
     try:
+        account_id = provider.get_account_id()
         result.resources_scanned = 1
         support_arn = "arn:aws:iam::aws:policy/AWSSupportAccess"
         try:
@@ -810,7 +812,7 @@ def check_support_role(provider: AWSProvider) -> CheckResult:
                     remediation=Remediation(
                         cli=(
                             "aws iam create-role --role-name aws-support-role "
-                            '--assume-role-policy-document \'{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"arn:aws:iam::ACCOUNT_ID:root"},"Action":"sts:AssumeRole"}]}\'\n'
+                            f'--assume-role-policy-document \'{{"Version":"2012-10-17","Statement":[{{"Effect":"Allow","Principal":{{"AWS":"arn:aws:iam::{account_id}:root"}},"Action":"sts:AssumeRole"}}]}}\'\n'
                             "aws iam attach-role-policy --role-name aws-support-role "
                             "--policy-arn arn:aws:iam::aws:policy/AWSSupportAccess"
                         ),
@@ -1223,6 +1225,76 @@ def check_role_max_session_duration(provider: AWSProvider) -> CheckResult:
     return result
 
 
+def check_privilege_escalation(provider: AWSProvider) -> CheckResult:
+    """Check for IAM privilege escalation paths across users and roles."""
+    result = CheckResult(check_id="aws-iam-018", check_name="IAM privilege escalation paths")
+
+    try:
+        from cloud_audit.providers.aws.iam_analyzer import analyze_escalation
+
+        paths = analyze_escalation(provider)
+        result.resources_scanned = 1  # Single API call scans entire account
+
+        for path in paths:
+            # Build remediation based on category
+            if path.category.value == "passrole_service":
+                cli_fix = (
+                    f"# Remove iam:PassRole from {path.principal_type.lower()} '{path.principal_name}':\n"
+                    f"# Review attached policies and remove or scope iam:PassRole to specific role ARNs."
+                )
+                tf_fix = (
+                    '# Scope iam:PassRole to specific roles:\n# Resource = ["arn:aws:iam::ACCOUNT:role/specific-role"]'
+                )
+            elif path.category.value == "iam_self_mutation":
+                cli_fix = (
+                    f"# Remove {path.required_actions[0]} from {path.principal_type.lower()} "
+                    f"'{path.principal_name}':\n"
+                    f"# Review and restrict attached policies."
+                )
+                tf_fix = (
+                    f"# Deny dangerous IAM mutations via SCP or permission boundary:\n"
+                    f'# Action = ["{path.required_actions[0]}"]\n'
+                    f'# Effect = "Deny"'
+                )
+            else:
+                cli_fix = (
+                    f"# Remove {', '.join(path.required_actions)} from "
+                    f"{path.principal_type.lower()} '{path.principal_name}'."
+                )
+                tf_fix = f"# Restrict or remove actions: {', '.join(path.required_actions)}"
+
+            result.findings.append(
+                Finding(
+                    check_id="aws-iam-018",
+                    title=(f"{path.principal_type} '{path.principal_name}' can escalate via {path.method}"),
+                    severity=path.severity,
+                    category=Category.SECURITY,
+                    resource_type=f"AWS::IAM::{path.principal_type}",
+                    resource_id=path.principal_arn,
+                    description=(
+                        f"{path.principal_type} '{path.principal_name}' has permissions to "
+                        f"escalate privileges via {path.method}: {path.target_privilege}. "
+                        f"Required actions: {', '.join(path.required_actions)}."
+                    ),
+                    recommendation=(
+                        f"Remove or restrict {', '.join(path.required_actions)} for "
+                        f"{path.principal_type.lower()} '{path.principal_name}'. "
+                        f"Use permission boundaries or SCPs to prevent escalation."
+                    ),
+                    remediation=Remediation(
+                        cli=cli_fix,
+                        terraform=tf_fix,
+                        doc_url="https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_boundaries.html",
+                        effort=Effort.MEDIUM,
+                    ),
+                )
+            )
+    except Exception as e:
+        result.error = str(e)
+
+    return result
+
+
 def get_checks(provider: AWSProvider) -> list[CheckFn]:
     """Return all IAM checks bound to the provider."""
     from cloud_audit.providers.base import make_check
@@ -1245,4 +1317,5 @@ def get_checks(provider: AWSProvider) -> list[CheckFn]:
         make_check(check_root_hardware_mfa, provider, check_id="aws-iam-015", category=Category.SECURITY),
         make_check(check_ec2_instance_roles, provider, check_id="aws-iam-016", category=Category.SECURITY),
         make_check(check_role_max_session_duration, provider, check_id="aws-iam-017", category=Category.SECURITY),
+        make_check(check_privilege_escalation, provider, check_id="aws-iam-018", category=Category.SECURITY),
     ]

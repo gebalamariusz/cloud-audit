@@ -15,12 +15,17 @@ def list_frameworks() -> list[dict[str, str]]:
     for f in sorted(_FRAMEWORKS_DIR.glob("*.json")):
         try:
             data = json.loads(f.read_text(encoding="utf-8"))
+            status = data.get("status", "stable")
+            name = data["framework_name"]
+            if status == "beta":
+                name = f"{name} (Beta)"
             frameworks.append(
                 {
                     "id": data["framework_id"],
-                    "name": data["framework_name"],
+                    "name": name,
                     "version": data.get("version", ""),
                     "controls_total": str(len(data.get("controls", {}))),
+                    "status": status,
                 }
             )
         except Exception:  # noqa: S112

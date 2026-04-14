@@ -52,13 +52,18 @@ def check_privileged_task(provider: AWSProvider) -> CheckResult:
                                     recommendation="Remove privileged mode. Use specific Linux capabilities instead if needed.",
                                     remediation=Remediation(
                                         cli=(
-                                            f"# Register a new task definition revision without privileged mode:\n"
-                                            f"# 1. Describe current: aws ecs describe-task-definition --task-definition {family}\n"
-                                            f'# 2. Remove "privileged": true from containerDefinitions\n'
-                                            f"# 3. Register: aws ecs register-task-definition --cli-input-json file://updated-td.json"
+                                            f"# Export current task definition, remove privileged mode, re-register:\n"
+                                            f"aws ecs describe-task-definition --task-definition {family} "
+                                            f"--query 'taskDefinition.{{family:family,containerDefinitions:containerDefinitions,"
+                                            f"cpu:cpu,memory:memory,networkMode:networkMode,requiresCompatibilities:requiresCompatibilities,"
+                                            f"executionRoleArn:executionRoleArn,taskRoleArn:taskRoleArn}}' "
+                                            f"--output json > /tmp/td-{family}.json\n"
+                                            f'# Edit /tmp/td-{family}.json: set "privileged": false for container "{container_name}"\n'
+                                            f"aws ecs register-task-definition --cli-input-json file:///tmp/td-{family}.json --region {region}"
                                         ),
                                         terraform=(
                                             f'resource "aws_ecs_task_definition" "{family}" {{\n'
+                                            f'  family = "{family}"\n'
                                             f"  container_definitions = jsonencode([{{\n"
                                             f'    name       = "{container_name}"\n'
                                             f"    privileged = false  # Never run privileged\n"
@@ -108,16 +113,19 @@ def check_task_logging(provider: AWSProvider) -> CheckResult:
                                     recommendation="Add a logConfiguration using awslogs, splunk, or another supported log driver.",
                                     remediation=Remediation(
                                         cli=(
-                                            f"# Add logging to the container definition:\n"
-                                            f"# In the containerDefinitions JSON, add:\n"
-                                            f'# "logConfiguration": {{\n'
-                                            f'#   "logDriver": "awslogs",\n'
-                                            f'#   "options": {{\n'
-                                            f'#     "awslogs-group": "/ecs/{family}",\n'
-                                            f'#     "awslogs-region": "{region}",\n'
-                                            f'#     "awslogs-stream-prefix": "ecs"\n'
-                                            f"#   }}\n"
-                                            f"# }}"
+                                            f"# 1. Create log group:\n"
+                                            f"aws logs create-log-group --log-group-name /ecs/{family} --region {region}\n"
+                                            f"# 2. Export task definition, add logging, re-register:\n"
+                                            f"aws ecs describe-task-definition --task-definition {family} "
+                                            f"--query 'taskDefinition.{{family:family,containerDefinitions:containerDefinitions,"
+                                            f"cpu:cpu,memory:memory,networkMode:networkMode,requiresCompatibilities:requiresCompatibilities,"
+                                            f"executionRoleArn:executionRoleArn,taskRoleArn:taskRoleArn}}' "
+                                            f"--output json > /tmp/td-{family}.json\n"
+                                            f'# Edit /tmp/td-{family}.json: add to container "{container_name}":\n'
+                                            f'#   "logConfiguration": {{"logDriver":"awslogs","options":{{'
+                                            f'"awslogs-group":"/ecs/{family}","awslogs-region":"{region}",'
+                                            f'"awslogs-stream-prefix":"ecs"}}}}\n'
+                                            f"aws ecs register-task-definition --cli-input-json file:///tmp/td-{family}.json --region {region}"
                                         ),
                                         terraform=(
                                             f'resource "aws_ecs_task_definition" "{family}" {{\n'

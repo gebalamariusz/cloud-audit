@@ -16,6 +16,7 @@ def check_config_enabled(provider: AWSProvider) -> CheckResult:
     result = CheckResult(check_id="aws-cfg-001", check_name="AWS Config enabled")
 
     try:
+        account_id = provider.get_account_id()
         for region in provider.regions:
             config = provider.session.client("config", region_name=region)
             result.resources_scanned += 1
@@ -39,23 +40,32 @@ def check_config_enabled(provider: AWSProvider) -> CheckResult:
                         recommendation="Enable AWS Config in all active regions.",
                         remediation=Remediation(
                             cli=(
+                                f"# Create the service-linked role (one-time, if not already created):\n"
+                                f"aws iam create-service-linked-role --aws-service-name config.amazonaws.com\n"
+                                f"# Enable Config recorder:\n"
                                 f"aws configservice put-configuration-recorder "
                                 f"--configuration-recorder name=default,"
-                                f"roleARN=arn:aws:iam::ACCOUNT_ID:role/aws-service-role/"
+                                f"roleARN=arn:aws:iam::{account_id}:role/aws-service-role/"
                                 f"config.amazonaws.com/AWSServiceRoleForConfig "
                                 f"--recording-group allSupported=true,"
                                 f"includeGlobalResourceTypes=true "
                                 f"--region {region}"
                             ),
                             terraform=(
+                                "# AWS Config uses a service-linked role by default:\n"
                                 'resource "aws_config_configuration_recorder" "main" {\n'
                                 '  name     = "default"\n'
-                                "  role_arn = aws_iam_role.config.arn\n"
+                                f'  role_arn = "arn:aws:iam::{account_id}:role/aws-service-role/config.amazonaws.com/AWSServiceRoleForConfig"\n'
                                 "\n"
                                 "  recording_group {\n"
                                 "    all_supported                 = true\n"
                                 "    include_global_resource_types = true\n"
                                 "  }\n"
+                                "}\n"
+                                "\n"
+                                'resource "aws_config_configuration_recorder_status" "main" {\n'
+                                "  name       = aws_config_configuration_recorder.main.name\n"
+                                "  is_enabled = true\n"
                                 "}"
                             ),
                             doc_url="https://docs.aws.amazon.com/config/latest/developerguide/gs-console.html",

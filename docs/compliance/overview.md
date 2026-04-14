@@ -6,16 +6,16 @@ cloud-audit includes a built-in compliance engine that maps scan findings to spe
 
 | Framework | Status | Controls | Automated |
 |-----------|--------|----------|-----------|
-| [CIS AWS v3.0](cis-aws-v3.md) | Available | 62 | 55 (89%) |
-| [SOC 2 Type II](soc2-type2.md) | Available | 43 | 24 (56%) |
-| [ISO 27001:2022](iso27001-2022.md) | Available | 93 | 48 (52%) |
-| [BSI C5:2020](bsi-c5-2020.md) | Available | 134 | 76 (57%) |
-| [HIPAA Security Rule](hipaa-security.md) | Available | 47 | 28 (60%) |
-| [NIS2 Directive](nis2-directive.md) | Available | 43 | 26 (60%) |
+| [CIS AWS v3.0](cis-aws-v3.md) | Stable | 62 | 55 (89%) |
+| [SOC 2 Type II](soc2-type2.md) | Stable | 43 | 24 (56%) |
+| [ISO 27001:2022](iso27001-2022.md) | Beta | 93 | 48 (52%) |
+| [BSI C5:2020](bsi-c5-2020.md) | Beta | 134 | 76 (57%) |
+| [HIPAA Security Rule](hipaa-security.md) | Beta | 47 | 28 (60%) |
+| [NIS2 Directive](nis2-directive.md) | Beta | 43 | 26 (60%) |
 
 ## How It Works
 
-1. cloud-audit runs all 88 checks against your AWS account
+1. cloud-audit runs all 94 checks against your AWS account
 2. The compliance engine maps findings to framework controls
 3. Each control gets a status: PASS, FAIL, PARTIAL, or NOT_ASSESSED
 4. Evidence statements are generated per control

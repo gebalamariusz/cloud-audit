@@ -1,6 +1,7 @@
 {
   "framework_id": "iso27001_2022",
   "framework_name": "ISO/IEC 27001:2022 - Annex A Controls",
+  "status": "beta",
   "version": "2022",
   "source_url": "https://www.iso.org/standard/27001",
   "disclaimer": "This report assists with ISO/IEC 27001:2022 Annex A compliance readiness assessment. It does not constitute ISO certification or replace a formal certification audit by an accredited body. This tool automates assessment of technical infrastructure controls; organizational, people, and physical controls require separate evaluation.",

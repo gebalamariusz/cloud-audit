@@ -15,7 +15,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from cloud_audit import __version__
-from cloud_audit.models import Finding, ScanReport, Severity
+from cloud_audit.models import Effort, Finding, ScanReport, Severity
 
 if TYPE_CHECKING:
     from cloud_audit.diff import DiffResult
@@ -173,6 +173,81 @@ def _print_summary(report: ScanReport, suppressed_count: int = 0) -> None:
                 width=80,
             )
         )
+
+    # Remediation Plan (root cause grouping)
+    if report.root_causes:
+        total_chains_broken = len({cid for rc in report.root_causes for cid in rc.chains_broken})
+        plan_table = Table(box=None, padding=(0, 1), show_header=True, header_style="bold")
+        plan_table.add_column("#", width=3, justify="right")
+        plan_table.add_column("Fix", min_width=30)
+        plan_table.add_column("Effort", width=8)
+        plan_table.add_column("Chains", width=7, justify="right")
+        plan_table.add_column("Findings", width=9, justify="right")
+
+        has_risk = any(rc.total_risk_reduced for rc in report.root_causes)
+        if has_risk:
+            plan_table.add_column("Risk Reduced", width=18)
+
+        for i, rc in enumerate(report.root_causes, 1):
+            effort_colors = {"low": "green", "medium": "yellow", "high": "red"}
+            effort_color = effort_colors.get(rc.effort.value, "dim")
+            row: list[str] = [
+                str(i),
+                rich_escape(rc.fix_title),
+                f"[{effort_color}]{rc.effort.value.upper()}[/{effort_color}]",
+                str(len(rc.chains_broken)),
+                str(rc.findings_closed),
+            ]
+            if has_risk:
+                row.append(rc.total_risk_reduced.display if rc.total_risk_reduced else "")
+            plan_table.add_row(*row)
+
+        console.print(
+            Panel(
+                plan_table,
+                title=(
+                    f"[bold]Remediation Plan "
+                    f"(fix {len(report.root_causes)} things, break {total_chains_broken} chains)[/bold]"
+                ),
+                border_style="cyan",
+                width=80,
+            )
+        )
+
+    # Quick Wins (copy-paste commands that break CRITICAL chains)
+    if report.root_causes and report.attack_chains:
+        critical_chain_ids = {c.chain_id for c in report.attack_chains if c.severity == Severity.CRITICAL}
+        quick_wins = [
+            rc
+            for rc in report.root_causes
+            if rc.effort == Effort.LOW and rc.remediation and any(cid in critical_chain_ids for cid in rc.chains_broken)
+        ]
+        if quick_wins:
+            chain_name_map = {c.chain_id: c.name for c in report.attack_chains}
+            qw_lines: list[str] = []
+            for i, qw in enumerate(quick_wins[:5], 1):
+                rem = qw.remediation
+                if not rem:
+                    continue
+                cli_first_line = rem.cli.split("\n")[0]
+                if cli_first_line.startswith("#"):
+                    cli_lines = [ln for ln in rem.cli.split("\n") if not ln.startswith("#")]
+                    cli_first_line = cli_lines[0] if cli_lines else cli_first_line
+                broken_names = ", ".join(
+                    f"{cid} ({chain_name_map.get(cid, '')})" for cid in qw.chains_broken if cid in critical_chain_ids
+                )
+                qw_lines.append(
+                    f"[bold]{i}.[/bold] [green]{rich_escape(cli_first_line.strip())}[/green]\n"
+                    f"   [dim]Breaks: {rich_escape(broken_names)}[/dim]"
+                )
+            console.print(
+                Panel(
+                    "\n\n".join(qw_lines),
+                    title="[bold]Quick Wins (break CRITICAL chains now)[/bold]",
+                    border_style="green",
+                    width=80,
+                )
+            )
 
     # Findings by severity
     if s.by_severity:
@@ -547,6 +622,9 @@ def scan(
             if export_fixes:
                 _export_fixes(report.all_findings, export_fixes)
 
+    # Auto-save scan report for simulate/trend commands
+    _auto_save_report(report)
+
     # Exit code
     if all_errored:
         raise typer.Exit(2)
@@ -740,9 +818,12 @@ def list_frameworks_cmd() -> None:
     table.add_column("Name")
     table.add_column("Version")
     table.add_column("Controls", justify="right")
+    table.add_column("Status")
 
     for fw in fws:
-        table.add_row(fw["id"], fw["name"], fw["version"], fw["controls_total"])
+        status = fw.get("status", "stable")
+        status_display = "[green]Stable[/green]" if status == "stable" else "[yellow]Beta[/yellow]"
+        table.add_row(fw["id"], fw["name"], fw["version"], fw["controls_total"], status_display)
 
     console.print(table)
     console.print("\n[dim]Usage: cloud-audit scan --compliance <ID>[/dim]")
@@ -1089,6 +1170,280 @@ def _print_diff(result: DiffResult) -> None:
     # No changes at all
     if not result.new_findings and not result.fixed_findings and not result.changed_findings:
         console.print("\n[green]No changes detected.[/green]")
+
+    console.print()
+
+
+_HISTORY_DIR = Path.home() / ".cloud-audit"
+
+
+def _auto_save_report(report: ScanReport) -> None:
+    """Save scan report for simulate/trend commands. Best-effort, never fails the scan."""
+    try:
+        _HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+        last_scan = _HISTORY_DIR / "last-scan.json"
+        last_scan.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+    except Exception:  # noqa: S110 — persistence is best-effort
+        pass
+    # Also save to timestamped history for trend analysis
+    try:
+        from cloud_audit.history import save_scan_to_history
+
+        save_scan_to_history(report)
+    except Exception:  # noqa: S110
+        pass
+
+
+def _load_last_report() -> ScanReport | None:
+    """Load the most recent saved scan report."""
+    last_scan = _HISTORY_DIR / "last-scan.json"
+    if not last_scan.exists():
+        return None
+    try:
+        return ScanReport.model_validate_json(last_scan.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+@app.command()
+def trend(
+    account_id: Annotated[
+        str | None,
+        typer.Option("--account", "-a", help="AWS account ID. Auto-detected from history if omitted."),
+    ] = None,
+    limit: Annotated[int, typer.Option("--limit", "-n", help="Max number of scans to show.")] = 30,
+) -> None:
+    """Show security posture trend over time.
+
+    Reads scan history saved by previous 'cloud-audit scan' runs.
+    """
+    from cloud_audit.history import _sparkline, compute_trend, list_accounts
+
+    # Resolve account ID
+    if not account_id:
+        accounts = list_accounts()
+        if not accounts:
+            console.print("[red]No scan history found. Run 'cloud-audit scan' first.[/red]")
+            raise typer.Exit(2)
+        if len(accounts) == 1:
+            account_id = accounts[0]
+        else:
+            console.print("[bold]Multiple accounts found:[/bold]")
+            for acc in accounts:
+                console.print(f"  {acc}")
+            console.print("\n[dim]Use --account <ID> to select one.[/dim]")
+            raise typer.Exit(2)
+
+    trend_report = compute_trend(account_id, limit=limit)
+    if trend_report is None:
+        console.print(f"[yellow]Need at least 2 scans for trends. Account {account_id} has fewer.[/yellow]")
+        raise typer.Exit(0)
+
+    snaps = trend_report.snapshots
+    console.print(f"\n[bold]Security Posture Trend[/bold]  Account: {account_id}  ({len(snaps)} scans)\n")
+
+    # Sparkline table
+    scores = [s.score for s in snaps]
+    chains = [s.chains for s in snaps]
+    findings = [s.findings for s in snaps]
+
+    trend_table = Table(box=None, padding=(0, 2), show_header=True, header_style="bold")
+    trend_table.add_column("Metric", width=14)
+    trend_table.add_column("Trend", width=12)
+    trend_table.add_column("First", width=8, justify="right")
+    trend_table.add_column("Latest", width=8, justify="right")
+    trend_table.add_column("Delta", width=10, justify="right")
+
+    score_d = scores[-1] - scores[0]
+    score_color = "green" if score_d > 0 else "red" if score_d < 0 else "dim"
+    trend_table.add_row(
+        "Score",
+        _sparkline(scores),
+        str(scores[0]),
+        f"[bold]{scores[-1]}[/bold]",
+        f"[{score_color}]{'+' if score_d > 0 else ''}{score_d}[/{score_color}]",
+    )
+
+    chains_d = chains[-1] - chains[0]
+    chains_color = "green" if chains_d < 0 else "red" if chains_d > 0 else "dim"
+    trend_table.add_row(
+        "Attack Chains",
+        _sparkline(chains),
+        str(chains[0]),
+        f"[bold]{chains[-1]}[/bold]",
+        f"[{chains_color}]{'+' if chains_d > 0 else ''}{chains_d}[/{chains_color}]",
+    )
+
+    findings_d = findings[-1] - findings[0]
+    findings_color = "green" if findings_d < 0 else "red" if findings_d > 0 else "dim"
+    trend_table.add_row(
+        "Findings",
+        _sparkline(findings),
+        str(findings[0]),
+        f"[bold]{findings[-1]}[/bold]",
+        f"[{findings_color}]{'+' if findings_d > 0 else ''}{findings_d}[/{findings_color}]",
+    )
+
+    # Risk row
+    first_risk = snaps[0].risk_display
+    last_risk = snaps[-1].risk_display
+    risk_first_high = snaps[0].risk_high
+    risk_last_high = snaps[-1].risk_high
+    if risk_first_high > 0:
+        risk_pct = int((1.0 - risk_last_high / risk_first_high) * 100) if risk_first_high else 0
+        risk_color = "green" if risk_pct > 0 else "red" if risk_pct < 0 else "dim"
+        trend_table.add_row(
+            "Risk Exposure",
+            _sparkline([s.risk_high for s in snaps]),
+            first_risk,
+            f"[bold]{last_risk}[/bold]",
+            f"[{risk_color}]{'-' if risk_pct > 0 else '+'}{abs(risk_pct)}%[/{risk_color}]",
+        )
+
+    console.print(Panel(trend_table, title="[bold]Posture Over Time[/bold]", border_style="cyan", width=80))
+
+    # Key changes
+    significant = [d for d in trend_report.deltas if abs(d.score_delta) >= 5 or abs(d.chains_delta) >= 1]
+    if significant:
+        console.print("\n[bold]Key changes:[/bold]")
+        for delta in significant[-5:]:
+            date_str = delta.timestamp.strftime("%b %d")
+            if delta.score_delta > 0:
+                score_icon = "[green]+[/green]"
+            elif delta.score_delta < 0:
+                score_icon = "[red]-[/red]"
+            else:
+                score_icon = " "
+            console.print(f"  {date_str}  {score_icon} {rich_escape(delta.description)}")
+
+    console.print()
+
+
+@app.command()
+def simulate(
+    fix: Annotated[
+        str,
+        typer.Option("--fix", "-f", help="Check ID(s) to simulate fixing (comma-separated)"),
+    ],
+    report_file: Annotated[
+        Path | None,
+        typer.Option("--report", "-r", help="Path to a JSON scan report. Default: last scan from ~/.cloud-audit/"),
+    ] = None,
+) -> None:
+    """Simulate the impact of applying a fix without changing anything in AWS.
+
+    Shows before/after comparison of health score, attack chains, and risk exposure.
+    """
+    # Load report
+    if report_file:
+        if not report_file.exists():
+            console.print(f"[red]Report file not found: {report_file}[/red]")
+            raise typer.Exit(2)
+        try:
+            report = ScanReport.model_validate_json(report_file.read_text(encoding="utf-8"))
+        except Exception as e:
+            console.print(f"[red]Failed to parse report: {e}[/red]")
+            raise typer.Exit(2) from None
+    else:
+        loaded = _load_last_report()
+        if loaded is None:
+            console.print("[red]No saved scan found. Run 'cloud-audit scan' first, or use --report.[/red]")
+            raise typer.Exit(2)
+        report = loaded
+
+    check_ids = [c.strip() for c in fix.split(",")]
+
+    # Validate check_ids exist in the report
+    report_check_ids = {f.check_id for f in report.all_findings}
+    unknown = [c for c in check_ids if c not in report_check_ids]
+    if unknown:
+        console.print(f"[yellow]Warning: check ID(s) not found in scan: {', '.join(unknown)}[/yellow]")
+        check_ids = [c for c in check_ids if c in report_check_ids]
+        if not check_ids:
+            console.print("[red]No valid check IDs to simulate.[/red]")
+            raise typer.Exit(2)
+
+    from cloud_audit.simulate import simulate_fix
+
+    result = simulate_fix(report, check_ids)
+
+    # Render before/after
+    console.print()
+    fix_names = ", ".join(f"[bold]{t}[/bold]" for t in result.fix_titles)
+    console.print(f"Simulation: Apply {fix_names}\n")
+
+    # Build comparison table
+    comp_table = Table(box=None, padding=(0, 2), show_header=True, header_style="bold")
+    comp_table.add_column("Metric", width=20)
+    comp_table.add_column("Before", width=22, justify="right")
+    comp_table.add_column("After", width=22, justify="right")
+    comp_table.add_column("Delta", width=16, justify="right")
+
+    # Score
+    score_color = "green" if result.score_delta > 0 else "red" if result.score_delta < 0 else "dim"
+    score_sign = "+" if result.score_delta > 0 else ""
+    comp_table.add_row(
+        "Health Score",
+        f"{result.score_before}/100",
+        f"[bold]{result.score_after}/100[/bold]",
+        f"[{score_color}]{score_sign}{result.score_delta}[/{score_color}]",
+    )
+
+    # Chains
+    chains_color = "green" if result.chains_delta < 0 else "dim"
+    comp_table.add_row(
+        "Attack Chains",
+        str(result.chains_before),
+        f"[bold]{result.chains_after}[/bold]",
+        f"[{chains_color}]{result.chains_delta}[/{chains_color}]",
+    )
+
+    # Findings
+    findings_delta = result.findings_after - result.findings_before
+    comp_table.add_row(
+        "Findings",
+        str(result.findings_before),
+        f"[bold]{result.findings_after}[/bold]",
+        f"[green]{findings_delta}[/green]" if findings_delta < 0 else str(findings_delta),
+    )
+
+    # Risk
+    risk_before_str = result.risk_before.display if result.risk_before else "N/A"
+    risk_after_str = result.risk_after.display if result.risk_after else "$0"
+    if result.risk_reduction_pct > 0:
+        risk_delta_str = f"[green]-{result.risk_reduction_pct:.0f}%[/green]"
+    else:
+        risk_delta_str = "[dim]-[/dim]"
+    comp_table.add_row("Risk Exposure", risk_before_str, f"[bold]{risk_after_str}[/bold]", risk_delta_str)
+
+    console.print(Panel(comp_table, title="[bold]Impact Analysis[/bold]", border_style="cyan", width=80))
+
+    # Chains broken
+    if result.chains_broken:
+        console.print(f"\n[bold]Chains broken ({len(result.chains_broken)}):[/bold]")
+        for chain in result.chains_broken:
+            sev_color = SEVERITY_COLORS.get(chain.severity, "dim")
+            console.print(
+                f"  [{sev_color}]{chain.severity.value.upper():8s}[/{sev_color}]  "
+                f"{rich_escape(chain.name)}  [green]-> GONE[/green]"
+            )
+
+    # Chains remaining
+    if result.chains_remaining:
+        console.print(f"\n[bold]Chains remaining ({len(result.chains_remaining)}):[/bold]")
+        for chain in result.chains_remaining:
+            sev_color = SEVERITY_COLORS.get(chain.severity, "dim")
+            console.print(f"  [{sev_color}]{chain.severity.value.upper():8s}[/{sev_color}]  {rich_escape(chain.name)}")
+
+    # Next fix recommendation
+    if result.next_fix:
+        console.print(
+            f"\n[bold]Next recommended fix:[/bold] {rich_escape(result.next_fix.fix_title)} "
+            f"-> breaks {len(result.next_fix.chains_broken)} more chain(s)"
+        )
+
+    if not result.chains_remaining:
+        console.print("\n[bold green]All attack chains eliminated![/bold green]")
 
     console.print()
 

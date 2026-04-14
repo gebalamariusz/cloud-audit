@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  Open-source CLI scanner that correlates findings into exploitable paths<br>
-  and generates copy-paste remediation (AWS CLI + Terraform).
+  Open-source CLI that correlates findings into exploitable paths,<br>
+  generates copy-paste remediation, and simulates fixes before you apply them.
 </p>
 
 <p align="center">
@@ -63,23 +63,32 @@ cloud-audit demo
 
 ```
 +------- Health Score -------+
-| 42 / 100                   |   Risk exposure: $725K - $7.3M
+| 34 / 100                   |   Risk exposure: $1.2M - $9.5M
 +----------------------------+
 
-+---- Attack Chains (3 detected) -----------------------------------+
++---- Attack Chains (5 detected) -----------------------------------+
 |  CRITICAL  Internet-Exposed Admin Instance                         |
 |            i-0abc123 - public SG + admin IAM role + IMDSv1         |
-|            Fix: Restrict security group (effort: LOW)              |
+|                                                                    |
+|  CRITICAL  IAM Privilege Escalation via iam:PassRole               |
+|            ci-deploy-role - 3-step path to admin                   |
 |                                                                    |
 |  CRITICAL  CI/CD to Admin Takeover                                 |
 |            github-deploy - OIDC no sub + admin policy              |
-|            Fix: Add sub condition (effort: LOW)                    |
 +--------------------------------------------------------------------+
 
-Findings by severity:  CRITICAL: 3  HIGH: 8  MEDIUM: 12  LOW: 5
++---- Remediation Plan -------------------------------------------+
+|  Fix 4 root causes, break 22 attack chains                       |
+|                                                                    |
+|  Quick Wins (effort: LOW, chains broken: 14):                      |
+|    1. Restrict SG ingress on sg-0abc123    -> breaks 8 chains      |
+|    2. Add OIDC sub condition               -> breaks 6 chains      |
++--------------------------------------------------------------------+
+
+Findings by severity:  CRITICAL: 5  HIGH: 9  MEDIUM: 14  LOW: 6
 ```
 
-88 checks across 21 AWS services. Every finding includes AWS CLI + Terraform remediation.
+94 checks across 23 AWS services. Every finding includes AWS CLI + Terraform remediation code. Root-cause grouping tells you which fixes break the most chains so you fix what matters first.
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=5uHoqggmTB8">
@@ -104,19 +113,19 @@ Other scanners give you a flat list of findings. cloud-audit correlates them int
                aws-vpc-002   aws-ec2-004       Detected: AC-01, AC-02
 ```
 
-Examples from the 25 built-in rules:
+Examples from the 31 built-in rules:
 
 | Chain | What it catches |
 |---|---|
+| IAM Privilege Escalation | iam:PassRole + lambda:Create + iam:Attach = 3-step path to admin |
 | Internet-Exposed Admin Instance | Public SG + admin IAM role + IMDSv1 = account takeover |
 | CI/CD to Admin Takeover | OIDC without sub condition + admin policy = pipeline hijack |
 | SSRF to Credential Theft | Public instance + IMDSv1 + no VPC flow logs = invisible exfiltration |
-| Unpatched Instance Exposed to Internet | Open SG + missing patches (SSM) = known CVE exploitation |
-| CloudTrail Blind Spot | CloudTrail not delivering to CloudWatch = all 15 CIS alarms non-functional |
+| AI Model Data Exfiltration | Bedrock model with public endpoint + no logging = silent data leak |
 
-Based on [MITRE ATT&CK Cloud](https://attack.mitre.org/matrices/enterprise/cloud/) and [Datadog pathfinding.cloud](https://github.com/DataDog/pathfinding.cloud). [See all 25 rules in the docs](https://haitmg.pl/cloud-audit/features/attack-chains/).
+Based on [MITRE ATT&CK Cloud](https://attack.mitre.org/matrices/enterprise/cloud/) and [Datadog pathfinding.cloud](https://github.com/DataDog/pathfinding.cloud). [See all 31 rules in the docs](https://haitmg.pl/cloud-audit/features/attack-chains/).
 
-### Copy-Paste Remediation
+### Copy-Paste Remediation + What-If Simulator
 
 Every finding includes AWS CLI commands, Terraform HCL, and documentation links. Export all fixes as a runnable script:
 
@@ -124,12 +133,20 @@ Every finding includes AWS CLI commands, Terraform HCL, and documentation links.
 cloud-audit scan --export-fixes fixes.sh
 ```
 
-### Scan Diff
+Simulate a fix before applying it to see which chains it breaks and how your score changes:
+
+```bash
+cloud-audit simulate --fix aws-vpc-002
+# Score: 34 -> 58 (+24)  |  Chains broken: 8 of 22  |  Findings resolved: 11
+```
+
+### Scan Diff and Trend Tracking
 
 Compare scans to track drift. Catches ClickOps changes, manual console edits, and regressions that IaC scanning misses.
 
 ```bash
 cloud-audit diff yesterday.json today.json
+cloud-audit trend                              # Time-series posture history
 ```
 
 Exit code 0 = no new findings, 1 = regression. See [daily-scan-with-diff.yml](examples/daily-scan-with-diff.yml) for a CI/CD workflow.
@@ -140,10 +157,10 @@ Built-in compliance engine with per-control evidence, readiness scoring, and aud
 
 - **CIS AWS v3.0** - 62 controls, 55 automated (89%)
 - **SOC 2 Type II** - 43 criteria, 24 automated (56%)
-- **BSI C5:2020** - 134 criteria, 57 automated/partial
-- **ISO 27001:2022** - 93 Annex A controls, 47 automated/partial
-- **HIPAA Security Rule** - 47 specs, 29 automated/partial
-- **NIS2 Directive** - 43 measures, 33 automated/partial
+- **BSI C5:2020** `Beta` - 134 criteria, 57 automated/partial
+- **ISO 27001:2022** `Beta` - 93 Annex A controls, 47 automated/partial
+- **HIPAA Security Rule** `Beta` - 47 specs, 29 automated/partial
+- **NIS2 Directive** `Beta` - 43 measures, 33 automated/partial
 
 ### Breach Cost Estimation
 
@@ -165,18 +182,19 @@ claude mcp add cloud-audit -- uvx --from cloud-audit cloud-audit-mcp
 
 | Feature | Prowler | Trivy | Checkov | cloud-audit |
 |---------|---------|-------|---------|-------------|
-| Checks | 576 | 517 | 2500+ | **88** |
-| Attack chain detection | No | No | No | **25 rules** |
+| Checks | 576 | 517 | 2500+ | **94** |
+| Attack chain detection | No | No | No | **31 rules + root-cause grouping** |
+| What-If remediation simulator | No | No | No | **Yes** |
+| IAM privilege escalation paths | No | No | No | **25 methods** |
 | Remediation per finding | CIS only | No | Links | **100% (CLI + Terraform)** |
 | Breach cost estimation | No | No | No | **Per finding + chain** |
-| CIS v3.0 compliance engine | Yes | No | No | **62 controls with evidence** |
-| SOC 2 Type II compliance | No | No | No | **43 criteria with evidence** |
-| Total compliance frameworks | CIS only | — | — | **6 (CIS, SOC 2, BSI C5, ISO 27001, HIPAA, NIS2)** |
+| AI-SPM (Bedrock/SageMaker) | No | No | No | **Yes** |
+| Compliance frameworks | CIS only | — | — | **6 (CIS, SOC 2 + 4 Beta)** |
 | MCP server (AI agents) | Paid ($99/mo) | No | No | **Free, standalone** |
 
-cloud-audit has fewer checks than Prowler but covers 6 compliance frameworks and deeper output per finding: remediation code, attack chain context, cost estimates, and compliance evidence. If you need exhaustive compliance coverage across multiple clouds, Prowler is the better choice. If you need a focused scan that shows how findings combine into real attack paths and tells you exactly how to fix each one, cloud-audit is built for that.
+cloud-audit has fewer checks than Prowler but goes deeper per finding: remediation code, attack chain correlation, cost estimates, and a What-If simulator that shows the impact of each fix before you apply it. If you need exhaustive compliance coverage across multiple clouds, Prowler is the better choice. If you need a focused scan that shows how findings chain into real attack paths and prioritizes what to fix first, cloud-audit is built for that.
 
-<sub>Feature snapshot as of April 2026. Verify against upstream docs for the latest details.</sub>
+<sub>Feature snapshot as of v2.0.0 (April 2026). Verify against upstream docs for the latest details.</sub>
 
 ---
 
@@ -281,150 +299,19 @@ Ready-to-use workflows: [basic scan](examples/github-actions.yml), [daily diff](
 
 ## AWS Permissions
 
-cloud-audit requires **read-only** access. Attach `SecurityAudit`:
+cloud-audit requires **read-only** access. Attach `SecurityAudit` (covers all checks including IAM escalation analysis):
 
 ```bash
 aws iam attach-role-policy --role-name auditor --policy-arn arn:aws:iam::aws:policy/SecurityAudit
 ```
 
-cloud-audit never modifies your infrastructure.
+cloud-audit never modifies your infrastructure. The `simulate` command runs locally against scan data -- it does not call AWS APIs.
 
 ## What It Checks
 
-88 checks across IAM, S3, EC2, VPC, RDS, EIP, EFS, CloudTrail, GuardDuty, KMS, CloudWatch, Lambda, ECS, SSM, Secrets Manager, AWS Config, Security Hub, Account, AWS Backup, Amazon Inspector, and AWS WAF.
+94 checks across IAM, S3, EC2, VPC, RDS, EIP, EFS, CloudTrail, GuardDuty, KMS, CloudWatch, Lambda, ECS, SSM, Secrets Manager, AWS Config, Security Hub, Account, AWS Backup, Amazon Inspector, AWS WAF, Amazon Bedrock, and Amazon SageMaker.
 
-<details>
-<summary>Full check list (88 checks)</summary>
-
-### IAM (17 checks)
-
-| ID | Severity | Description |
-|----|----------|-------------|
-| `aws-iam-001` | Critical | Root account without MFA |
-| `aws-iam-002` | High | IAM user with console access but no MFA |
-| `aws-iam-003` | Medium | Access key older than 90 days |
-| `aws-iam-004` | Medium | Access key unused for 45+ days |
-| `aws-iam-005` | Critical | IAM policy with Action:\* and Resource:\* |
-| `aws-iam-006` | Medium | Password policy below CIS requirements |
-| `aws-iam-007` | Critical | OIDC trust policy without sub condition |
-| `aws-iam-008` | Critical | Root account has active access keys |
-| `aws-iam-009` | Medium | Multiple active access keys per user |
-| `aws-iam-010` | Medium | Direct policy attachment on user (not via group) |
-| `aws-iam-011` | Medium | No AWSSupportAccess role |
-| `aws-iam-012` | Medium | IAM Access Analyzer not enabled |
-| `aws-iam-013` | Medium | Expired SSL/TLS certificate in IAM |
-| `aws-iam-014` | Medium | AWSCloudShellFullAccess attached |
-| `aws-iam-015` | Medium | Root uses virtual MFA (not hardware) |
-| `aws-iam-016` | Medium | EC2 instance without IAM role |
-| `aws-iam-017` | Medium | IAM role max session duration exceeds 1 hour |
-
-### S3 (7 checks)
-
-| ID | Severity | Description |
-|----|----------|-------------|
-| `aws-s3-001` | High | S3 bucket without public access block |
-| `aws-s3-002` | Low | S3 bucket using SSE-S3 instead of SSE-KMS |
-| `aws-s3-003` | Low | S3 bucket without versioning |
-| `aws-s3-004` | Low | S3 bucket without lifecycle rules |
-| `aws-s3-005` | Medium | S3 bucket without access logging |
-| `aws-s3-006` | Medium | S3 bucket policy does not deny HTTP |
-| `aws-s3-007` | Low | S3 bucket without MFA Delete |
-
-### EC2 (6 checks)
-
-| ID | Severity | Description |
-|----|----------|-------------|
-| `aws-ec2-001` | High | Publicly shared AMI |
-| `aws-ec2-002` | Medium | Unencrypted EBS volume |
-| `aws-ec2-003` | Low | Stopped EC2 instance (EBS charges continue) |
-| `aws-ec2-004` | High | EC2 instance with IMDSv1 (SSRF risk) |
-| `aws-ec2-005` | Low | EC2 instance without termination protection |
-| `aws-ec2-006` | Medium | EBS default encryption disabled |
-
-### VPC (6 checks)
-
-| ID | Severity | Description |
-|----|----------|-------------|
-| `aws-vpc-001` | Medium | Default VPC in use |
-| `aws-vpc-002` | Critical | Security group open to 0.0.0.0/0 or ::/0 on sensitive ports |
-| `aws-vpc-003` | Medium | VPC without flow logs |
-| `aws-vpc-004` | Medium | NACL allows internet access to admin ports |
-| `aws-vpc-005` | Medium | Default security group has active rules |
-| `aws-vpc-006` | Medium | VPC without private subnets (no network segmentation) |
-
-### RDS (4 checks)
-
-| ID | Severity | Description |
-|----|----------|-------------|
-| `aws-rds-001` | Critical | Publicly accessible RDS instance |
-| `aws-rds-002` | High | Unencrypted RDS instance |
-| `aws-rds-003` | Medium | Single-AZ RDS instance |
-| `aws-rds-004` | Low | RDS auto minor version upgrade disabled |
-
-### CloudTrail (8 checks)
-
-| ID | Severity | Description |
-|----|----------|-------------|
-| `aws-ct-001` | Critical | No multi-region CloudTrail trail |
-| `aws-ct-002` | High | CloudTrail log file validation disabled |
-| `aws-ct-003` | Critical | CloudTrail S3 bucket is publicly accessible |
-| `aws-ct-004` | High | CloudTrail S3 bucket has no access logging |
-| `aws-ct-005` | Medium | CloudTrail not encrypted with KMS |
-| `aws-ct-006` | Medium | S3 object-level write events not logged |
-| `aws-ct-007` | Medium | S3 object-level read events not logged |
-| `aws-ct-008` | Medium | CloudTrail not integrated with CloudWatch Logs |
-
-### CloudWatch (16 checks)
-
-| ID | Severity | Description |
-|----|----------|-------------|
-| `aws-cw-001` | High | No alarm for root account usage |
-| `aws-cw-002` | Medium | No alarm for unauthorized API calls |
-| `aws-cw-003` | Medium | No alarm for console sign-in without MFA |
-| `aws-cw-004` | Medium | No alarm for IAM policy changes |
-| `aws-cw-005` | Medium | No alarm for CloudTrail config changes |
-| `aws-cw-006` | Medium | No alarm for console auth failures |
-| `aws-cw-007` | Medium | No alarm for CMK disable/deletion |
-| `aws-cw-008` | Medium | No alarm for S3 bucket policy changes |
-| `aws-cw-009` | Medium | No alarm for Config changes |
-| `aws-cw-010` | Medium | No alarm for security group changes |
-| `aws-cw-011` | Medium | No alarm for NACL changes |
-| `aws-cw-012` | Medium | No alarm for network gateway changes |
-| `aws-cw-013` | Medium | No alarm for route table changes |
-| `aws-cw-014` | Medium | No alarm for VPC changes |
-| `aws-cw-015` | Medium | No alarm for Organizations changes |
-| `aws-cw-016` | Medium | CloudWatch log group not encrypted with KMS |
-
-### Other Services (24 checks)
-
-| ID | Severity | Description |
-|----|----------|-------------|
-| `aws-gd-001` | High | GuardDuty not enabled |
-| `aws-gd-002` | Medium | GuardDuty findings unresolved for 30+ days |
-| `aws-cfg-001` | Medium | AWS Config not enabled |
-| `aws-cfg-002` | High | AWS Config recorder stopped |
-| `aws-kms-001` | Medium | KMS key without automatic rotation |
-| `aws-kms-002` | High | KMS key policy with Principal:\* |
-| `aws-lambda-001` | High | Lambda function URL with no authentication |
-| `aws-lambda-002` | Medium | Lambda running on a deprecated runtime |
-| `aws-lambda-003` | High | Potential secrets in Lambda env vars |
-| `aws-ecs-001` | Critical | ECS task running in privileged mode |
-| `aws-ecs-002` | High | ECS task without log configuration |
-| `aws-ecs-003` | Medium | ECS service with Execute Command enabled |
-| `aws-ssm-001` | Medium | EC2 instance not managed by SSM |
-| `aws-ssm-002` | High | SSM parameter stored as plain String |
-| `aws-ssm-003` | Medium | EC2 instance not patch compliant (SSM) |
-| `aws-sm-001` | Medium | Secret without rotation |
-| `aws-sm-002` | Low | Secret unused for 90+ days |
-| `aws-eip-001` | Low | Unattached Elastic IP |
-| `aws-efs-001` | Medium | EFS file system not encrypted |
-| `aws-sh-001` | Medium | Security Hub not enabled |
-| `aws-account-001` | Medium | No security alternate contact |
-| `aws-backup-001` | Medium | No AWS Backup vault or backup plan |
-| `aws-inspector-001` | Medium | Amazon Inspector v2 not enabled |
-| `aws-waf-001` | Medium | No WAFv2 WebACL in region |
-
-</details>
+[See all 94 checks by service](https://haitmg.pl/cloud-audit/checks/) or run `cloud-audit list-checks` locally.
 
 ## Alternatives
 
@@ -439,21 +326,20 @@ cloud-audit has grown beyond what a single README can cover. The full documentat
 
 - **[Getting Started](https://haitmg.pl/cloud-audit/getting-started/installation/)** - installation, quick start, demo mode
 - **[Compliance](https://haitmg.pl/cloud-audit/compliance/overview/)** - 6 frameworks: CIS AWS v3.0, SOC 2, BSI C5, ISO 27001, HIPAA, NIS2
-- **[Attack Chains](https://haitmg.pl/cloud-audit/features/attack-chains/)** - all 25 rules with MITRE ATT&CK references
+- **[Attack Chains](https://haitmg.pl/cloud-audit/features/attack-chains/)** - all 31 rules with MITRE ATT&CK references
 - **[MCP Server](https://haitmg.pl/cloud-audit/features/mcp-server/)** - full setup guide for Claude Code, Cursor, VS Code
 - **[Configuration](https://haitmg.pl/cloud-audit/configuration/config-file/)** - config file, env vars, suppressions
 - **[CI/CD](https://haitmg.pl/cloud-audit/ci-cd/github-actions/)** - GitHub Actions, SARIF, pre-commit hooks
 - **[Reports](https://haitmg.pl/cloud-audit/reports/html/)** - HTML, JSON, SARIF, Markdown output formats
-- **[All 88 Checks](https://haitmg.pl/cloud-audit/checks/)** - full check reference by service
+- **[All 94 Checks](https://haitmg.pl/cloud-audit/checks/)** - full check reference by service
 
 This README covers the essentials. For compliance framework details, advanced configuration, and per-check documentation, see the full docs.
 
 ## What's Next
 
-- Root cause grouping ("fix 1 setting, close 12 findings")
-- Historical score tracking for Type II audits
 - Multi-account scanning (AWS Organizations)
 - Terraform drift detection
+- Data perimeter checks (S3, KMS, STS boundary policies)
 
 Past releases: [CHANGELOG.md](CHANGELOG.md)
 

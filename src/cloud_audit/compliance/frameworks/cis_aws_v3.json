@@ -1,6 +1,7 @@
 {
   "framework_id": "cis_aws_v3",
   "framework_name": "CIS Amazon Web Services Foundations Benchmark",
+  "status": "stable",
   "version": "3.0.0",
   "source_url": "https://www.cisecurity.org/benchmark/amazon_web_services",
   "disclaimer": "This report assists with compliance assessment against CIS AWS Foundations Benchmark v3.0.0. It does not constitute official CIS certification. 7 of 62 recommendations require manual review and are not automatable.",

@@ -55,6 +55,9 @@ def check_cloudtrail_enabled(provider: AWSProvider) -> CheckResult:
                     recommendation="Create a multi-region CloudTrail trail immediately.",
                     remediation=Remediation(
                         cli=(
+                            "# Create S3 bucket for CloudTrail logs first:\n"
+                            "aws s3api create-bucket --bucket YOUR-AUDIT-BUCKET "
+                            "--region us-east-1\n"
                             "aws cloudtrail create-trail "
                             "--name main-trail "
                             "--s3-bucket-name YOUR-AUDIT-BUCKET "
@@ -63,12 +66,42 @@ def check_cloudtrail_enabled(provider: AWSProvider) -> CheckResult:
                             "aws cloudtrail start-logging --name main-trail"
                         ),
                         terraform=(
+                            'resource "aws_s3_bucket" "audit" {\n'
+                            '  bucket = "YOUR-ORG-cloudtrail-logs"  # Choose a unique name\n'
+                            "}\n"
+                            "\n"
+                            'resource "aws_s3_bucket_policy" "audit" {\n'
+                            "  bucket = aws_s3_bucket.audit.id\n"
+                            "  policy = jsonencode({\n"
+                            '    Version = "2012-10-17"\n'
+                            "    Statement = [\n"
+                            "      {\n"
+                            '        Sid       = "AWSCloudTrailAclCheck"\n'
+                            '        Effect    = "Allow"\n'
+                            '        Principal = { Service = "cloudtrail.amazonaws.com" }\n'
+                            '        Action    = "s3:GetBucketAcl"\n'
+                            "        Resource  = aws_s3_bucket.audit.arn\n"
+                            "      },\n"
+                            "      {\n"
+                            '        Sid       = "AWSCloudTrailWrite"\n'
+                            '        Effect    = "Allow"\n'
+                            '        Principal = { Service = "cloudtrail.amazonaws.com" }\n'
+                            '        Action    = "s3:PutObject"\n'
+                            '        Resource  = "${aws_s3_bucket.audit.arn}/*"\n'
+                            '        Condition = { StringEquals = { "s3:x-amz-acl" = "bucket-owner-full-control" } }\n'
+                            "      }\n"
+                            "    ]\n"
+                            "  })\n"
+                            "}\n"
+                            "\n"
                             'resource "aws_cloudtrail" "main" {\n'
                             '  name                          = "main-trail"\n'
                             "  s3_bucket_name                = aws_s3_bucket.audit.id\n"
                             "  is_multi_region_trail         = true\n"
                             "  enable_log_file_validation    = true\n"
                             "  include_global_service_events = true\n"
+                            "\n"
+                            "  depends_on = [aws_s3_bucket_policy.audit]\n"
                             "}"
                         ),
                         doc_url="https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-create-and-update-a-trail.html",
@@ -243,6 +276,8 @@ def check_cloudtrail_kms_encryption(provider: AWSProvider) -> CheckResult:
     result = CheckResult(check_id="aws-ct-005", check_name="CloudTrail KMS encryption")
 
     try:
+        account_id = provider.get_account_id()
+        region = provider.regions[0]
         trails = _list_trails(provider)
         seen_arns: set[str] = set()
 
@@ -271,11 +306,38 @@ def check_cloudtrail_kms_encryption(provider: AWSProvider) -> CheckResult:
                         recommendation="Enable SSE-KMS encryption on the CloudTrail trail.",
                         remediation=Remediation(
                             cli=(
+                                f"# Create a KMS key for CloudTrail, then enable:\n"
                                 f"aws cloudtrail update-trail --name {trail_name} "
-                                f"--kms-key-id arn:aws:kms:REGION:ACCOUNT:key/KEY_ID"
+                                f"--kms-key-id arn:aws:kms:{region}:{account_id}:key/KEY_ID"
                             ),
                             terraform=(
-                                'resource "aws_cloudtrail" "main" {\n'
+                                'resource "aws_kms_key" "cloudtrail" {\n'
+                                '  description = "KMS key for CloudTrail log encryption"\n'
+                                "  enable_key_rotation = true\n"
+                                "\n"
+                                "  policy = jsonencode({\n"
+                                '    Version = "2012-10-17"\n'
+                                "    Statement = [\n"
+                                "      {\n"
+                                '        Sid       = "EnableRootAccountAccess"\n'
+                                '        Effect    = "Allow"\n'
+                                f'        Principal = {{ AWS = "arn:aws:iam::{account_id}:root" }}\n'
+                                '        Action    = "kms:*"\n'
+                                '        Resource  = "*"\n'
+                                "      },\n"
+                                "      {\n"
+                                '        Sid       = "AllowCloudTrailEncrypt"\n'
+                                '        Effect    = "Allow"\n'
+                                '        Principal = { Service = "cloudtrail.amazonaws.com" }\n'
+                                '        Action    = "kms:GenerateDataKey*"\n'
+                                '        Resource  = "*"\n'
+                                "      }\n"
+                                "    ]\n"
+                                "  })\n"
+                                "}\n"
+                                "\n"
+                                f'resource "aws_cloudtrail" "main" {{\n'
+                                f'  name       = "{trail_name}"\n'
                                 "  # ...\n"
                                 "  kms_key_id = aws_kms_key.cloudtrail.arn\n"
                                 "}"
@@ -523,6 +585,8 @@ def check_cloudtrail_cloudwatch_logs(provider: AWSProvider) -> CheckResult:
     result = CheckResult(check_id="aws-ct-008", check_name="CloudTrail CloudWatch Logs integration")
 
     try:
+        account_id = provider.get_account_id()
+        region = provider.regions[0]
         trails = _list_trails(provider)
         seen_arns: set[str] = set()
 
@@ -557,11 +621,13 @@ def check_cloudtrail_cloudwatch_logs(provider: AWSProvider) -> CheckResult:
                         recommendation="Configure the trail to deliver logs to a CloudWatch Logs log group.",
                         remediation=Remediation(
                             cli=(
-                                f"# Create a log group and IAM role first, then:\n"
+                                f"# 1. Create log group:\n"
+                                f"aws logs create-log-group --log-group-name cloudtrail-logs --region {region}\n"
+                                f"# 2. Create IAM role (see doc_url for trust policy), then:\n"
                                 f"aws cloudtrail update-trail \\\n"
                                 f"  --name {trail_name} \\\n"
-                                f"  --cloud-watch-logs-log-group-arn arn:aws:logs:REGION:ACCOUNT_ID:log-group:cloudtrail-logs:* \\\n"
-                                f"  --cloud-watch-logs-role-arn arn:aws:iam::ACCOUNT_ID:role/cloudtrail-cloudwatch-role"
+                                f"  --cloud-watch-logs-log-group-arn arn:aws:logs:{region}:{account_id}:log-group:cloudtrail-logs:* \\\n"
+                                f"  --cloud-watch-logs-role-arn arn:aws:iam::{account_id}:role/cloudtrail-cloudwatch-role"
                             ),
                             terraform=(
                                 'resource "aws_cloudwatch_log_group" "cloudtrail" {\n'
@@ -569,10 +635,37 @@ def check_cloudtrail_cloudwatch_logs(provider: AWSProvider) -> CheckResult:
                                 "  retention_in_days = 365\n"
                                 "}\n"
                                 "\n"
-                                'resource "aws_cloudtrail" "main" {\n'
+                                'resource "aws_iam_role" "cloudtrail_cloudwatch" {\n'
+                                '  name = "cloudtrail-cloudwatch-role"\n'
+                                "\n"
+                                "  assume_role_policy = jsonencode({\n"
+                                '    Version = "2012-10-17"\n'
+                                "    Statement = [{\n"
+                                '      Effect    = "Allow"\n'
+                                '      Principal = { Service = "cloudtrail.amazonaws.com" }\n'
+                                '      Action    = "sts:AssumeRole"\n'
+                                "    }]\n"
+                                "  })\n"
+                                "}\n"
+                                "\n"
+                                'resource "aws_iam_role_policy" "cloudtrail_cloudwatch" {\n'
+                                '  name = "cloudtrail-cloudwatch-policy"\n'
+                                "  role = aws_iam_role.cloudtrail_cloudwatch.id\n"
+                                "\n"
+                                "  policy = jsonencode({\n"
+                                '    Version = "2012-10-17"\n'
+                                "    Statement = [{\n"
+                                '      Effect   = "Allow"\n'
+                                '      Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]\n'
+                                '      Resource = "${aws_cloudwatch_log_group.cloudtrail.arn}:*"\n'
+                                "    }]\n"
+                                "  })\n"
+                                "}\n"
+                                "\n"
+                                f'resource "aws_cloudtrail" "main" {{\n'
                                 f'  name                       = "{trail_name}"\n'
                                 "  # ...\n"
-                                '  cloud_watch_logs_group_arn  = "${{aws_cloudwatch_log_group.cloudtrail.arn}}:*"\n'
+                                '  cloud_watch_logs_group_arn  = "${aws_cloudwatch_log_group.cloudtrail.arn}:*"\n'
                                 "  cloud_watch_logs_role_arn   = aws_iam_role.cloudtrail_cloudwatch.arn\n"
                                 "}"
                             ),

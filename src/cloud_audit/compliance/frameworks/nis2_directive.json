@@ -1,6 +1,7 @@
 {
   "framework_id": "nis2_directive",
   "framework_name": "NIS2 Directive - Network and Information Security",
+  "status": "beta",
   "version": "Directive (EU) 2022/2555",
   "source_url": "https://eur-lex.europa.eu/eli/dir/2022/2555",
   "disclaimer": "This report assists with NIS2 Directive technical compliance readiness assessment for AWS infrastructure. It does not constitute formal NIS2 compliance certification or replace assessment by a national competent authority. NIS2 compliance requires organizational, governance, and incident reporting measures beyond technical controls. Member State transposition laws may impose additional requirements.",

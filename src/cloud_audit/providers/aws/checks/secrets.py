@@ -19,6 +19,7 @@ def check_secret_rotation(provider: AWSProvider) -> CheckResult:
     try:
         now = datetime.now(timezone.utc)
         max_age_days = 90
+        account_id = provider.get_account_id()
 
         for region in provider.regions:
             sm = provider.session.client("secretsmanager", region_name=region)
@@ -47,7 +48,7 @@ def check_secret_rotation(provider: AWSProvider) -> CheckResult:
                                 remediation=Remediation(
                                     cli=(
                                         f"aws secretsmanager rotate-secret --secret-id {name} "
-                                        f"--rotation-lambda-arn arn:aws:lambda:{region}:ACCOUNT:function:rotation-fn "
+                                        f"--rotation-lambda-arn arn:aws:lambda:{region}:{account_id}:function:rotation-fn "
                                         f"--rotation-rules AutomaticallyAfterDays=90 --region {region}"
                                     ),
                                     terraform=(

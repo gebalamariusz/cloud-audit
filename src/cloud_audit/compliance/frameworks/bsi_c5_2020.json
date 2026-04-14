@@ -1,6 +1,7 @@
 {
   "framework_id": "bsi_c5_2020",
   "framework_name": "BSI C5:2020 - Cloud Computing Compliance Criteria Catalogue",
+  "status": "beta",
   "version": "2020",
   "source_url": "https://www.bsi.bund.de/EN/Themen/Unternehmen-und-Organisationen/Informationen-und-Empfehlungen/Empfehlungen-nach-Angriffszielen/Cloud-Computing/Kriterienkatalog-C5/kriterienkatalog-c5_node.html",
   "disclaimer": "This report assists with BSI C5:2020 compliance readiness assessment. It does not constitute official BSI C5 attestation or replace examination by a qualified auditor. This tool automates assessment of technical infrastructure controls; organizational, procedural, and governance controls require separate evaluation.",

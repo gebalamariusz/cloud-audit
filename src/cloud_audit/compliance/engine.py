@@ -55,6 +55,9 @@ class ComplianceReport:
     # Underlying scan
     scan_report: ScanReport
 
+    # Metadata
+    status: str = "stable"
+
     # Per-control results
     controls: list[ControlResult] = field(default_factory=list)
 
@@ -103,6 +106,7 @@ def build_compliance_report(
         version=fw.get("version", ""),
         source_url=fw.get("source_url", ""),
         disclaimer=fw.get("disclaimer", ""),
+        status=fw.get("status", "stable"),
         scan_report=scan_report,
     )
 

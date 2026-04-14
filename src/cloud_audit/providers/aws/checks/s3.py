@@ -489,10 +489,38 @@ def check_bucket_deny_http(provider: AWSProvider) -> CheckResult:
                         ),
                         recommendation="Add a Deny statement for aws:SecureTransport=false to the existing policy.",
                         remediation=Remediation(
-                            cli=f"# Add deny HTTP statement to existing bucket policy for '{name}'",
+                            cli=(
+                                f"# Get current policy, add DenyHTTP statement, then put back:\n"
+                                f"aws s3api get-bucket-policy --bucket {name} --query Policy --output text > /tmp/policy.json\n"
+                                f"# Add this statement to the Statement array in policy.json:\n"
+                                f'# {{"Sid":"DenyHTTP","Effect":"Deny","Principal":"*","Action":"s3:*",'
+                                f'"Resource":["arn:aws:s3:::{name}","arn:aws:s3:::{name}/*"],'
+                                f'"Condition":{{"Bool":{{"aws:SecureTransport":"false"}}}}}}\n'
+                                f"# Then apply:\n"
+                                f"aws s3api put-bucket-policy --bucket {name} --policy file:///tmp/policy.json"
+                            ),
                             terraform=(
-                                "# Add condition to deny non-HTTPS:\n"
-                                '# Condition = { Bool = { "aws:SecureTransport" = "false" } }'
+                                f"# Merge DenyHTTP into your existing bucket policy:\n"
+                                f'resource "aws_s3_bucket_policy" "{tf}" {{\n'
+                                f"  bucket = aws_s3_bucket.{tf}.id\n"
+                                f"  policy = jsonencode({{\n"
+                                f'    Version = "2012-10-17"\n'
+                                f"    Statement = [\n"
+                                f"      # ... keep your existing statements ...\n"
+                                f"      {{\n"
+                                f'        Sid       = "DenyHTTP"\n'
+                                f'        Effect    = "Deny"\n'
+                                f'        Principal = "*"\n'
+                                f'        Action    = "s3:*"\n'
+                                f"        Resource  = [\n"
+                                f"          aws_s3_bucket.{tf}.arn,\n"
+                                f'          "${{aws_s3_bucket.{tf}.arn}}/*"\n'
+                                f"        ]\n"
+                                f'        Condition = {{ Bool = {{ "aws:SecureTransport" = "false" }} }}\n'
+                                f"      }}\n"
+                                f"    ]\n"
+                                f"  }})\n"
+                                f"}}"
                             ),
                             doc_url="https://docs.aws.amazon.com/AmazonS3/latest/userguide/security-best-practices.html",
                             effort=Effort.LOW,
@@ -512,6 +540,7 @@ def check_bucket_mfa_delete(provider: AWSProvider) -> CheckResult:
     result = CheckResult(check_id="aws-s3-007", check_name="S3 MFA Delete")
 
     try:
+        account_id = provider.get_account_id()
         buckets = _list_buckets(provider)
         for bucket in buckets:
             name = bucket["Name"]
@@ -543,7 +572,7 @@ def check_bucket_mfa_delete(provider: AWSProvider) -> CheckResult:
                                 f"# MFA Delete must be enabled by the root account:\n"
                                 f"aws s3api put-bucket-versioning --bucket {name} "
                                 f"--versioning-configuration Status=Enabled,MFADelete=Enabled "
-                                f"--mfa 'arn:aws:iam::ACCOUNT:mfa/root-mfa TOTP_CODE'"
+                                f"--mfa 'arn:aws:iam::{account_id}:mfa/root-mfa TOTP_CODE'"
                             ),
                             terraform=(
                                 "# MFA Delete cannot be enabled via Terraform (requires root credentials).\n"
