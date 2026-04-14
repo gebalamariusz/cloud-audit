@@ -6,16 +6,16 @@
 <h1 align="center">cloud-audit</h1>
 
 <p align="center">
-  <strong>Find AWS attack chains and get exact fixes.</strong>
+  <strong>Find AWS attack paths, IAM escalation routes, and the fixes that matter most.</strong>
 </p>
 
 <p align="center">
-  Open-source CLI that correlates findings into exploitable paths,<br>
-  generates copy-paste remediation, and simulates fixes before you apply them.
+  Open-source CLI scanner that helps you decide what to fix first &mdash;<br>
+  not just what's wrong.
 </p>
 
 <p align="center">
-  Detect exploitable attack paths &nbsp;-&nbsp; Get AWS CLI + Terraform fixes &nbsp;-&nbsp; Run locally, no SaaS required
+  Find attack chains and IAM escalation paths &nbsp;-&nbsp; Simulate fixes before you apply them &nbsp;-&nbsp; Fix root causes, not individual findings
 </p>
 
 <p align="center">
@@ -34,13 +34,9 @@
   <a href="https://haitmg.pl/cloud-audit/">Documentation</a> -
   <a href="https://haitmg.pl/cloud-audit/getting-started/quick-start/">Quick Start</a> -
   <a href="https://haitmg.pl/cloud-audit/compliance/overview/">Compliance</a> -
-  <a href="https://haitmg.pl/cloud-audit/compliance/cis-aws-v3/">CIS</a> -
-  <a href="https://haitmg.pl/cloud-audit/compliance/soc2-type2/">SOC 2</a> -
-  <a href="https://haitmg.pl/cloud-audit/compliance/bsi-c5-2020/">BSI C5</a> -
-  <a href="https://haitmg.pl/cloud-audit/compliance/iso27001-2022/">ISO 27001</a> -
-  <a href="https://haitmg.pl/cloud-audit/compliance/hipaa-security/">HIPAA</a> -
-  <a href="https://haitmg.pl/cloud-audit/compliance/nis2-directive/">NIS2</a> -
   <a href="https://haitmg.pl/cloud-audit/features/attack-chains/">Attack Chains</a> -
+  <a href="https://haitmg.pl/cloud-audit/features/iam-escalation/">IAM Escalation</a> -
+  <a href="https://haitmg.pl/cloud-audit/features/simulate/">Simulator</a> -
   <a href="https://haitmg.pl/cloud-audit/features/mcp-server/">MCP Server</a>
 </p>
 
@@ -59,13 +55,11 @@ cloud-audit demo
 
 ---
 
-## What You Get
+## Why It's Different
+
+Most scanners give you findings. cloud-audit helps you **decide what to fix first**.
 
 ```
-+------- Health Score -------+
-| 34 / 100                   |   Risk exposure: $1.2M - $9.5M
-+----------------------------+
-
 +---- Attack Chains (5 detected) -----------------------------------+
 |  CRITICAL  Internet-Exposed Admin Instance                         |
 |            i-0abc123 - public SG + admin IAM role + IMDSv1         |
@@ -84,11 +78,16 @@ cloud-audit demo
 |    1. Restrict SG ingress on sg-0abc123    -> breaks 8 chains      |
 |    2. Add OIDC sub condition               -> breaks 6 chains      |
 +--------------------------------------------------------------------+
-
-Findings by severity:  CRITICAL: 5  HIGH: 9  MEDIUM: 14  LOW: 6
 ```
 
-94 checks across 23 AWS services. Every finding includes AWS CLI + Terraform remediation code. Root-cause grouping tells you which fixes break the most chains so you fix what matters first.
+Other tools give you 200 findings sorted by severity. cloud-audit groups them by root cause, shows which single fixes collapse the most attack paths, and lets you simulate the impact before you touch anything:
+
+```bash
+cloud-audit simulate --fix aws-vpc-002
+# Score: 34 -> 58 (+24)  |  Chains broken: 8 of 22  |  Findings resolved: 11
+```
+
+94 checks across 23 AWS services. Every finding includes copy-paste AWS CLI + Terraform remediation.
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=5uHoqggmTB8">
@@ -98,7 +97,17 @@ Findings by severity:  CRITICAL: 5  HIGH: 9  MEDIUM: 14  LOW: 6
   <sub>Watch the 1-minute demo</sub>
 </p>
 
-If cloud-audit helped you find something you missed, consider giving it a star. It helps others discover the project.
+---
+
+## What's New in 2.0
+
+| Feature | What it does |
+|---|---|
+| **IAM Privilege Escalation** | 25 escalation methods across 6 categories. PMapper has been dead since 2022 -- this is its open-source replacement. |
+| **What-If Simulator** | `cloud-audit simulate --fix aws-vpc-002` shows score change, chains broken, and risk reduction before you apply anything. |
+| **Root Cause Grouping** | "Fix 4 things, break 22 chains." Groups findings by shared root cause and ranks by impact. |
+| **Security Posture Trend** | `cloud-audit trend` tracks health score, chains, and risk over time with sparkline visualization. |
+| **AI-SPM** | First open-source Bedrock + SageMaker scanner. 5 checks, 3 attack chains (model theft, LLMjacking, data poisoning). |
 
 ---
 
@@ -106,112 +115,96 @@ If cloud-audit helped you find something you missed, consider giving it a star. 
 
 ### Attack Chain Detection
 
-Other scanners give you a flat list of findings. cloud-audit correlates them into attack paths an attacker would actually exploit.
+31 rules correlate individual findings into exploitable attack paths.
 
 ```
   Internet --> Public SG --> EC2 (IMDSv1) --> Admin IAM Creds --> Account Takeover
                aws-vpc-002   aws-ec2-004       Detected: AC-01, AC-02
 ```
 
-Examples from the 31 built-in rules:
-
 | Chain | What it catches |
 |---|---|
 | IAM Privilege Escalation | iam:PassRole + lambda:Create + iam:Attach = 3-step path to admin |
-| Internet-Exposed Admin Instance | Public SG + admin IAM role + IMDSv1 = account takeover |
+| Internet-Exposed Admin | Public SG + admin IAM role + IMDSv1 = account takeover |
 | CI/CD to Admin Takeover | OIDC without sub condition + admin policy = pipeline hijack |
-| SSRF to Credential Theft | Public instance + IMDSv1 + no VPC flow logs = invisible exfiltration |
-| AI Model Data Exfiltration | Bedrock model with public endpoint + no logging = silent data leak |
+| LLMjacking | Bedrock no logging + no guardrails = undetected model abuse |
 
-Based on [MITRE ATT&CK Cloud](https://attack.mitre.org/matrices/enterprise/cloud/) and [Datadog pathfinding.cloud](https://github.com/DataDog/pathfinding.cloud). [See all 31 rules in the docs](https://haitmg.pl/cloud-audit/features/attack-chains/).
+Based on [MITRE ATT&CK Cloud](https://attack.mitre.org/matrices/enterprise/cloud/) and [pathfinding.cloud](https://github.com/DataDog/pathfinding.cloud). [See all 31 rules](https://haitmg.pl/cloud-audit/features/attack-chains/).
 
-### Copy-Paste Remediation + What-If Simulator
+### Remediation + Simulator
 
-Every finding includes AWS CLI commands, Terraform HCL, and documentation links. Export all fixes as a runnable script:
+Every finding includes AWS CLI, Terraform HCL, and docs links. Export all fixes:
 
 ```bash
 cloud-audit scan --export-fixes fixes.sh
 ```
 
-Simulate a fix before applying it to see which chains it breaks and how your score changes:
+Simulate before applying:
 
 ```bash
 cloud-audit simulate --fix aws-vpc-002
 # Score: 34 -> 58 (+24)  |  Chains broken: 8 of 22  |  Findings resolved: 11
+
+cloud-audit simulate --fix aws-vpc-002,aws-ct-001,aws-iam-007
+# Score: 34 -> 82 (+48)  |  Chains broken: 19 of 22
 ```
 
-### Scan Diff and Trend Tracking
-
-Compare scans to track drift. Catches ClickOps changes, manual console edits, and regressions that IaC scanning misses.
+### Trend Tracking
 
 ```bash
-cloud-audit diff yesterday.json today.json
-cloud-audit trend                              # Time-series posture history
+cloud-audit diff yesterday.json today.json    # Catches ClickOps drift
+cloud-audit trend                              # Posture over time
 ```
 
-Exit code 0 = no new findings, 1 = regression. See [daily-scan-with-diff.yml](examples/daily-scan-with-diff.yml) for a CI/CD workflow.
-
 ### 6 Compliance Frameworks
-
-Built-in compliance engine with per-control evidence, readiness scoring, and auditor-ready reports.
 
 - **CIS AWS v3.0** - 62 controls, 55 automated (89%)
 - **SOC 2 Type II** - 43 criteria, 24 automated (56%)
 - **BSI C5:2020** `Beta` - 134 criteria, 57 automated/partial
-- **ISO 27001:2022** `Beta` - 93 Annex A controls, 47 automated/partial
+- **ISO 27001:2022** `Beta` - 93 controls, 47 automated/partial
 - **HIPAA Security Rule** `Beta` - 47 specs, 29 automated/partial
 - **NIS2 Directive** `Beta` - 43 measures, 33 automated/partial
 
 ### Breach Cost Estimation
 
-Every finding includes a dollar-range risk estimate based on published breach data (IBM Cost of a Data Breach 2024, Verizon DBIR, enforcement actions). Attack chains use compound risk multipliers. Every estimate links to its source.
+Every finding and chain includes a dollar-range risk estimate based on IBM/Verizon breach data, with source links.
 
 ### MCP Server for AI Agents
-
-Ask Claude Code, Cursor, or VS Code Copilot to scan your AWS account:
 
 ```bash
 claude mcp add cloud-audit -- uvx --from cloud-audit cloud-audit-mcp
 ```
 
-6 tools: `scan_aws`, `get_findings`, `get_attack_chains`, `get_remediation`, `get_health_score`, `list_checks`. Free and standalone - no SaaS account needed.
+6 tools: `scan_aws`, `get_findings`, `get_attack_chains`, `get_remediation`, `get_health_score`, `list_checks`. Free and standalone.
 
 ---
 
 ## How It Compares
 
-| Feature | Prowler | Trivy | Checkov | cloud-audit |
-|---------|---------|-------|---------|-------------|
-| Checks | 576 | 517 | 2500+ | **94** |
-| Attack chain detection | No | No | No | **31 rules + root-cause grouping** |
-| What-If remediation simulator | No | No | No | **Yes** |
-| IAM privilege escalation paths | No | No | No | **25 methods** |
-| Remediation per finding | CIS only | No | Links | **100% (CLI + Terraform)** |
-| Breach cost estimation | No | No | No | **Per finding + chain** |
-| AI-SPM (Bedrock/SageMaker) | No | No | No | **Yes** |
-| Compliance frameworks | CIS only | — | — | **6 (CIS, SOC 2 + 4 Beta)** |
-| MCP server (AI agents) | Paid ($99/mo) | No | No | **Free, standalone** |
+| Feature | Prowler | Trivy | cloud-audit |
+|---------|---------|-------|-------------|
+| Checks | 576 | 517 | **94** |
+| Attack chains + root-cause grouping | No | No | **31 rules** |
+| What-If remediation simulator | No | No | **Yes** |
+| IAM privilege escalation | No | No | **25 methods** |
+| Remediation per finding | CIS only | No | **100% (CLI + TF)** |
+| AI-SPM (Bedrock/SageMaker) | No | No | **Yes** |
+| Compliance frameworks | CIS | -- | **6** |
 
-cloud-audit has fewer checks than Prowler but goes deeper per finding: remediation code, attack chain correlation, cost estimates, and a What-If simulator that shows the impact of each fix before you apply it. If you need exhaustive compliance coverage across multiple clouds, Prowler is the better choice. If you need a focused scan that shows how findings chain into real attack paths and prioritizes what to fix first, cloud-audit is built for that.
+cloud-audit has fewer checks but goes deeper per finding: attack chain correlation, root-cause grouping, cost estimates, and a simulator that shows the impact of each fix before you apply it. If you need exhaustive multi-cloud compliance coverage, use Prowler. If you need to know what to fix first and why, cloud-audit is built for that.
 
-<sub>Feature snapshot as of v2.0.0 (April 2026). Verify against upstream docs for the latest details.</sub>
+<sub>Feature snapshot as of v2.0.0 (April 2026).</sub>
 
 ---
 
 ## Reports
 
 ```bash
-cloud-audit scan --format html --output report.html    # Client-ready HTML
-cloud-audit scan --format json --output report.json    # Machine-readable
-cloud-audit scan --format sarif --output results.sarif # GitHub Code Scanning
-cloud-audit scan --format markdown --output report.md  # PR comments
+cloud-audit scan --format html -o report.html     # Client-ready HTML
+cloud-audit scan --format json -o report.json      # Machine-readable
+cloud-audit scan --format sarif -o results.sarif   # GitHub Code Scanning
+cloud-audit scan --format markdown -o report.md    # PR comments
 ```
-
-Format is auto-detected from file extension.
-
-<p align="center">
-  <img src="assets/report-preview.png" alt="cloud-audit HTML report" width="700">
-</p>
 
 ## Installation
 
@@ -236,6 +229,8 @@ cloud-audit scan --regions all                          # All enabled regions
 cloud-audit scan --min-severity high                   # Filter by severity
 cloud-audit scan --role-arn arn:aws:iam::...:role/audit # Cross-account
 cloud-audit scan --quiet                               # Exit code only (CI/CD)
+cloud-audit simulate --fix aws-vpc-002                 # What-If simulator
+cloud-audit trend                                      # Posture over time
 cloud-audit list-checks                                # List all checks
 ```
 
@@ -313,33 +308,22 @@ cloud-audit never modifies your infrastructure. The `simulate` command runs loca
 
 [See all 94 checks by service](https://haitmg.pl/cloud-audit/checks/) or run `cloud-audit list-checks` locally.
 
-## Alternatives
-
-- **[Prowler](https://github.com/prowler-cloud/prowler)** - 576+ checks, multi-cloud, full CIS coverage, auto-remediation. The most comprehensive open-source scanner.
-- **[Trivy](https://github.com/aquasecurity/trivy)** - Container, IaC, and cloud scanner. Strong on containers, growing cloud coverage.
-- **[Steampipe](https://github.com/turbot/steampipe)** - SQL-based cloud querying. Very flexible.
-- **[AWS Security Hub](https://aws.amazon.com/security-hub/)** - Native AWS service with continuous monitoring. Free 30-day trial.
-
 ## Documentation
 
-cloud-audit has grown beyond what a single README can cover. The full documentation is at **[haitmg.pl/cloud-audit](https://haitmg.pl/cloud-audit/)** and includes:
+Full docs at **[haitmg.pl/cloud-audit](https://haitmg.pl/cloud-audit/)**:
 
 - **[Getting Started](https://haitmg.pl/cloud-audit/getting-started/installation/)** - installation, quick start, demo mode
-- **[Compliance](https://haitmg.pl/cloud-audit/compliance/overview/)** - 6 frameworks: CIS AWS v3.0, SOC 2, BSI C5, ISO 27001, HIPAA, NIS2
 - **[Attack Chains](https://haitmg.pl/cloud-audit/features/attack-chains/)** - all 31 rules with MITRE ATT&CK references
-- **[MCP Server](https://haitmg.pl/cloud-audit/features/mcp-server/)** - full setup guide for Claude Code, Cursor, VS Code
-- **[Configuration](https://haitmg.pl/cloud-audit/configuration/config-file/)** - config file, env vars, suppressions
-- **[CI/CD](https://haitmg.pl/cloud-audit/ci-cd/github-actions/)** - GitHub Actions, SARIF, pre-commit hooks
-- **[Reports](https://haitmg.pl/cloud-audit/reports/html/)** - HTML, JSON, SARIF, Markdown output formats
+- **[IAM Escalation](https://haitmg.pl/cloud-audit/features/iam-escalation/)** - 25 methods, 6 categories
+- **[What-If Simulator](https://haitmg.pl/cloud-audit/features/simulate/)** - simulate remediation impact
+- **[Compliance](https://haitmg.pl/cloud-audit/compliance/overview/)** - 6 frameworks: CIS, SOC 2, BSI C5, ISO 27001, HIPAA, NIS2
 - **[All 94 Checks](https://haitmg.pl/cloud-audit/checks/)** - full check reference by service
-
-This README covers the essentials. For compliance framework details, advanced configuration, and per-check documentation, see the full docs.
 
 ## What's Next
 
 - Multi-account scanning (AWS Organizations)
+- SCP + permission boundary evaluation in IAM escalation
 - Terraform drift detection
-- Data perimeter checks (S3, KMS, STS boundary policies)
 
 Past releases: [CHANGELOG.md](CHANGELOG.md)
 
@@ -350,9 +334,8 @@ git clone https://github.com/gebalamariusz/cloud-audit.git
 cd cloud-audit
 pip install -e ".[dev]"
 
-pytest -v                          # tests
+pytest -v                          # 496 tests
 ruff check src/ tests/             # lint
-ruff format --check src/ tests/    # format
 mypy src/                          # type check
 ```
 
