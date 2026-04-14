@@ -58,11 +58,15 @@ nav:
     - Demo Mode: getting-started/demo.md
   - Features:
     - Attack Chains: features/attack-chains.md
-    - Breach Cost Estimation: features/breach-cost.md
-    - MCP Server: features/mcp-server.md
-    - Scan Diff: features/scan-diff.md
+    - IAM Privilege Escalation: features/iam-escalation.md
+    - What-If Simulator: features/simulate.md
+    - Security Posture Trend: features/trend.md
+    - AI-SPM (Bedrock/SageMaker): features/ai-spm.md
     - Remediation: features/remediation.md
+    - Breach Cost Estimation: features/breach-cost.md
     - Health Score: features/health-score.md
+    - Scan Diff: features/scan-diff.md
+    - MCP Server: features/mcp-server.md
   - Compliance:
     - Overview: compliance/overview.md
     - CIS AWS v3.0: compliance/cis-aws-v3.md
