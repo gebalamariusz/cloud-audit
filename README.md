@@ -181,19 +181,28 @@ claude mcp add cloud-audit -- uvx --from cloud-audit cloud-audit-mcp
 
 ## How It Compares
 
-| Feature | Prowler | Trivy | cloud-audit |
-|---------|---------|-------|-------------|
-| Checks | 576 | 517 | **94** |
-| Attack chains + root-cause grouping | No | No | **31 rules** |
-| What-If remediation simulator | No | No | **Yes** |
-| IAM privilege escalation | No | No | **25 methods** |
-| Remediation per finding | CIS only | No | **100% (CLI + TF)** |
-| AI-SPM (Bedrock/SageMaker) | No | No | **Yes** |
-| Compliance frameworks | CIS | -- | **6** |
+[Prowler](https://github.com/prowler-cloud/prowler) is the AWS security standard: 572 checks across 83 services, 41 compliance frameworks (CIS, PCI-DSS, HIPAA, SOC2, NIST 800, ISO 27001, GDPR, FedRAMP, NIS2, MITRE ATT&CK and more), 55 auto-remediation fixers, and graph-based attack path analysis in the Prowler App (Cartography + Neo4j). It also covers Azure, GCP, Kubernetes, M365, and 10+ other providers.
 
-cloud-audit has fewer checks but goes deeper per finding: attack chain correlation, root-cause grouping, cost estimates, and a simulator that shows the impact of each fix before you apply it. If you need exhaustive multi-cloud compliance coverage, use Prowler. If you need to know what to fix first and why, cloud-audit is built for that.
+cloud-audit is AWS-only and intentionally narrower (94 curated checks). It goes deep where Prowler goes wide: attack chain correlation and IAM escalation detection run in the free CLI with zero infrastructure, every finding ships with reviewable Terraform + AWS CLI remediation, and scan diff / drift tracking is built into the CLI.
 
-<sub>Feature snapshot as of v2.0.0 (April 2026).</sub>
+| Feature | Prowler | cloud-audit |
+|---------|---------|-------------|
+| AWS checks | 572 across 83 services | 94 across 23 services |
+| Compliance frameworks (AWS) | 41 (CIS, PCI-DSS, HIPAA, SOC2, NIST, ISO 27001, GDPR, FedRAMP, NIS2, ...) | 6 (CIS v3.0, SOC 2, BSI C5, ISO 27001, HIPAA, NIS2) |
+| Auto-remediation | 55 fixers across 17 AWS services (direct API calls) | 94/94 findings with CLI + Terraform output (reviewable, you apply) |
+| Attack path / graph analysis | Prowler App (Cartography + graph queries) | CLI-native (31 rules, no infra) |
+| IAM privilege escalation graph | Prowler App | CLI-native (25 methods) |
+| What-If remediation simulator | No | Yes |
+| AI/ML security checks (Bedrock + SageMaker) | ~20 checks | 5 checks + 3 attack chain rules |
+| Scan diff / drift tracking | Prowler App | Built-in CLI (`cloud-audit diff`) |
+| Breach cost estimates (USD) | No | Per-finding + per-chain |
+| MCP Server | Free | Free |
+| Multi-cloud | AWS + 13 others | AWS only |
+| License | Apache 2.0 | MIT |
+
+Use Prowler for compliance breadth, multi-cloud coverage, and graph-based attack path analysis. Use cloud-audit for fast CLI-native attack chain detection, reviewable Terraform remediation, and CI/CD drift tracking. They are complementary, not competitors - a common setup is Prowler for quarterly compliance evidence plus cloud-audit daily in CI/CD.
+
+<sub>Prowler stats verified from github.com/prowler-cloud/prowler (April 2026). cloud-audit snapshot as of v2.0.1.</sub>
 
 ---
 
