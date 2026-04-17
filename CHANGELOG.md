@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-04-17
+
+### Changed
+
+- Canonical project Homepage in PyPI metadata now points to https://haitmg.pl/cloud-audit/ (was the GitHub repo URL). GitHub remains linked via the `Source` and `Repository` fields. No code changes.
+
 ## [2.0.0] - 2026-04-14
 
 ### Added

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cloud-audit"
-version = "2.0.0"
+version = "2.0.1"
 description = "Open-source AWS security scanner with IAM escalation detection, What-If simulator, security trends, AI-SPM (Bedrock/SageMaker), 6 compliance frameworks, 31 attack chain rules, breach cost estimation, and MCP server. 94 checks across 23 services. Every finding includes CLI + Terraform remediation."
 readme = "README.md"
 license = "MIT"
@@ -56,8 +56,9 @@ cloud-audit = "cloud_audit.cli:app"
 cloud-audit-mcp = "cloud_audit.mcp_server:main"
 
 [project.urls]
-Homepage = "https://github.com/gebalamariusz/cloud-audit"
+Homepage = "https://haitmg.pl/cloud-audit/"
 Documentation = "https://haitmg.pl/cloud-audit/"
+Source = "https://github.com/gebalamariusz/cloud-audit"
 Repository = "https://github.com/gebalamariusz/cloud-audit"
 Issues = "https://github.com/gebalamariusz/cloud-audit/issues"
 Changelog = "https://github.com/gebalamariusz/cloud-audit/blob/main/CHANGELOG.md"
