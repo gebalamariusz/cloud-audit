@@ -37,6 +37,7 @@ coverage.xml
 # Reports (generated output, not source)
 *.html
 !src/cloud_audit/reports/templates/*.html.j2
+!overrides/*.html
 
 # Internal / local-only .md files (never push) - allowlist specific docs below
 *.md

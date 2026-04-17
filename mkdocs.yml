@@ -6,6 +6,7 @@ repo_name: gebalamariusz/cloud-audit
 
 theme:
   name: material
+  custom_dir: overrides
   palette:
     - scheme: slate
       primary: deep purple

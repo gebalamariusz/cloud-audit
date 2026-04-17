@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{#
+  JSON-LD structured data for the cloud-audit documentation site.
+  Rendered only on the site homepage (docs/index.md).
+
+  Updating: when cloud-audit version bumps, change the "softwareVersion"
+  value below. Keep featureList in sync with docs/index.md.
+#}
+
+{% block extrahead %}
+  {{ super() }}
+  {% if page.is_homepage %}
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://haitmg.pl/cloud-audit/#software",
+        "name": "cloud-audit",
+        "alternateName": "cloud-audit CLI",
+        "applicationCategory": "SecurityApplication",
+        "operatingSystem": "Linux, macOS, Windows",
+        "softwareVersion": "2.0.1",
+        "url": "https://haitmg.pl/cloud-audit/",
+        "downloadUrl": "https://pypi.org/project/cloud-audit/",
+        "softwareHelp": "https://haitmg.pl/cloud-audit/getting-started/installation/",
+        "license": "https://opensource.org/licenses/MIT",
+        "programmingLanguage": "Python",
+        "description": "Open-source AWS security scanner with attack chain detection, IAM privilege escalation analysis, and copy-paste CLI + Terraform remediation for every finding. 94 curated checks across 23 AWS services.",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD",
+          "availability": "https://schema.org/InStock"
+        },
+        "author": { "@id": "https://haitmg.pl/#mariusz" },
+        "publisher": { "@id": "https://haitmg.pl/#org" },
+        "featureList": [
+          "94 curated AWS security checks across 23 services",
+          "31 attack chain rules correlating findings into exploit paths",
+          "25 IAM privilege escalation detection methods",
+          "What-If remediation simulator",
+          "Security posture trend tracking",
+          "AI-SPM support (Bedrock + SageMaker)",
+          "6 compliance frameworks: CIS AWS v3.0, SOC 2, BSI C5, ISO 27001, HIPAA, NIS2",
+          "Breach cost estimation based on published incident data",
+          "MCP Server for AI agents",
+          "Copy-paste AWS CLI and Terraform remediation for every finding",
+          "SARIF, HTML, Markdown, and JSON output formats",
+          "GitHub Actions and pre-commit hook integration"
+        ],
+        "keywords": "AWS security scanner, attack chains, IAM privilege escalation, PMapper alternative, CIS AWS v3.0, cloud security, DevSecOps, Terraform remediation, SARIF, MCP server, breach cost estimation",
+        "subjectOf": {
+          "@type": "NewsArticle",
+          "headline": "Cloud-audit: Fast, open-source AWS security scanner",
+          "url": "https://www.helpnetsecurity.com/2026/03/11/cloud-audit-open-source-aws-security-scanner/",
+          "datePublished": "2026-03-11",
+          "publisher": {
+            "@type": "Organization",
+            "name": "Help Net Security",
+            "url": "https://www.helpnetsecurity.com/"
+          }
+        },
+        "sameAs": [
+          "https://github.com/gebalamariusz/cloud-audit",
+          "https://pypi.org/project/cloud-audit/",
+          "https://ghcr.io/gebalamariusz/cloud-audit",
+          "https://registry.modelcontextprotocol.io/v0/servers?search=cloud-audit",
+          "https://glama.ai/mcp/servers/gebalamariusz/cloud-audit"
+        ],
+        "codeRepository": "https://github.com/gebalamariusz/cloud-audit",
+        "releaseNotes": "https://github.com/gebalamariusz/cloud-audit/blob/main/CHANGELOG.md"
+      },
+      {
+        "@type": "Organization",
+        "@id": "https://haitmg.pl/#org",
+        "name": "HAIT",
+        "legalName": "HAIT",
+        "url": "https://haitmg.pl",
+        "email": "kontakt@haitmg.pl",
+        "sameAs": [
+          "https://github.com/gebalamariusz",
+          "https://dev.to/haitmg"
+        ]
+      },
+      {
+        "@type": "Person",
+        "@id": "https://haitmg.pl/#mariusz",
+        "name": "Mariusz Gebala",
+        "jobTitle": "Cloud and DevOps Engineer",
+        "url": "https://haitmg.pl/about/",
+        "sameAs": [
+          "https://github.com/gebalamariusz",
+          "https://dev.to/haitmg"
+        ],
+        "worksFor": { "@id": "https://haitmg.pl/#org" },
+        "knowsAbout": [
+          "AWS",
+          "Palo Alto Networks",
+          "Terraform",
+          "Cloud Security",
+          "IAM Privilege Escalation",
+          "DevOps"
+        ],
+        "hasCredential": [
+          {
+            "@type": "EducationalOccupationalCredential",
+            "name": "AWS Certified Solutions Architect - Associate",
+            "credentialCategory": "certification"
+          },
+          {
+            "@type": "EducationalOccupationalCredential",
+            "name": "Microsoft Certified: Azure Administrator Associate",
+            "credentialCategory": "certification"
+          },
+          {
+            "@type": "EducationalOccupationalCredential",
+            "name": "Palo Alto Networks PCNSA",
+            "credentialCategory": "certification"
+          }
+        ]
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://haitmg.pl/cloud-audit/#website",
+        "name": "cloud-audit documentation",
+        "url": "https://haitmg.pl/cloud-audit/",
+        "description": "Official documentation for the cloud-audit open-source AWS security scanner",
+        "publisher": { "@id": "https://haitmg.pl/#org" },
+        "about": { "@id": "https://haitmg.pl/cloud-audit/#software" },
+        "inLanguage": "en"
+      }
+    ]
+  }
+  </script>
+  {% endif %}
+{% endblock %}
