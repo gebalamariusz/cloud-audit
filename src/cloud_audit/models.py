@@ -123,6 +123,9 @@ class EscalationCategory(str, Enum):
     LAMBDA_CODE_MOD = "lambda_code_modification"
     TRUST_POLICY_ABUSE = "trust_policy_abuse"
     PERMISSION_BOUNDARY = "permission_boundary_bypass"
+    RESOURCE_POLICY_ABUSE = "resource_policy_abuse"
+    COMPUTE_HIJACK = "compute_hijack"
+    LATERAL_ASSUME_ROLE = "lateral_assume_role"
 
 
 class EscalationPath(BaseModel):

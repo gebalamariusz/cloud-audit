@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-04-28
+
+### Added
+
+- **IAM Privilege Escalation - Tier 1 + Tier 2 + Tier 3**: 39 new detection methods, total 64 across 9 categories (was 25/6). Coverage of all known IAM privilege escalation paths in pathfinding.cloud.
+
+  Tier 1 (20 methods - PassRole variants + resource policy abuse + deny removal):
+  - PassRole + Glue variants: `glue:CreateJob`, `glue:UpdateJob`, `glue:CreateSession`
+  - PassRole + ECS variants: `ecs:UpdateService`, `ecs:RegisterTaskDefinition` (auto-deploy)
+  - PassRole + CloudFormation: `cloudformation:UpdateStack`
+  - PassRole + EC2 instance profile hijack: `ec2:AssociateIamInstanceProfile`, `ec2:ReplaceIamInstanceProfileAssociation`
+  - PassRole + Lambda event source mapping
+  - Instance profile role swap (no PassRole): `iam:RemoveRoleFromInstanceProfile` + `iam:AddRoleToInstanceProfile`
+  - **NEW Resource Policy Abuse category**: `lambda:AddPermission`, `lambda:AddLayerVersionPermission`
+  - IAM deny-removal patterns: `iam:DeleteRolePolicy`, `iam:DeleteUserPolicy`, `iam:DetachRolePolicy`, `iam:DetachUserPolicy`, `iam:CreateServiceLinkedRole`
+  - Credential access extensions: `iam:UpdateAccessKey`, `iam:DeactivateMFADevice`, `iam:DeleteVirtualMFADevice` (MFA bypass paths)
+
+  Tier 2 (12 methods - new compute primitives + SSM):
+  - PassRole + new services: `codebuild:CreateProject`, `apprunner:CreateService`, `sagemaker:CreateNotebookInstance`, `sagemaker:CreateProcessingJob`, `bedrock:CreateAgent`, `states:CreateStateMachine`
+  - **NEW Compute Hijack category**: `ssm:SendCommand`, `ssm:StartSession` (managed EC2 abuse), `ec2-instance-connect:SendSSHPublicKey` (60s SSH key push), `codebuild:UpdateProject` (hijack existing CI build), `apprunner:UpdateService` (replace running container)
+  - Credential access extension: `ssm:GetParameter` (read secrets from Parameter Store)
+
+  Tier 3 (4 methods - lateral movement via AssumeRole graph - NEW pipeline):
+  - **NEW Lateral AssumeRole category** with new module `iam_trust_graph.py` parsing `AssumeRolePolicyDocument` and building a directed graph
+  - `AssumeRole:Direct` - 1-hop assume from a principal to a role with admin permissions
+  - `AssumeRole:Chain` - multi-hop assume chain (up to 4 hops) ending at admin
+  - `AssumeRole:WildcardTrust` - any role with `Principal: "*"` trust policy
+  - `AssumeRole:CrossAccountRoot` - any role trusting external account `:root`
+  - Same-account root expansion: roles trusting `arn:aws:iam::SAME:root` are reachable by any principal in account with `sts:AssumeRole`
+  - Bare 12-digit account IDs are normalized to `:root` ARNs
+  - Trust conditions (MFA / ExternalId / SourceArn) are flagged but not semantically evaluated
+
 ## [2.0.1] - 2026-04-17
 
 ### Changed

@@ -1256,6 +1256,63 @@ def check_privilege_escalation(provider: AWSProvider) -> CheckResult:
                     f'# Action = ["{path.required_actions[0]}"]\n'
                     f'# Effect = "Deny"'
                 )
+            elif path.category.value == "resource_policy_abuse":
+                cli_fix = (
+                    f"# Restrict {path.required_actions[0]} for {path.principal_type.lower()} "
+                    f"'{path.principal_name}':\n"
+                    f"# Resource policy modifications enable cross-account/cross-principal abuse.\n"
+                    f"# Scope this action to specific function/layer ARNs or remove entirely."
+                )
+                tf_fix = (
+                    f"# Deny resource policy abuse via SCP or permission boundary:\n"
+                    f'# Action = ["{path.required_actions[0]}"]\n'
+                    f'# Effect = "Deny"'
+                )
+            elif path.category.value == "compute_hijack":
+                cli_fix = (
+                    f"# Restrict {', '.join(path.required_actions)} for "
+                    f"{path.principal_type.lower()} '{path.principal_name}':\n"
+                    f"# These actions allow taking over existing compute that holds a privileged role.\n"
+                    f"# Scope to specific instance/project/service ARNs and require MFA where possible."
+                )
+                tf_fix = (
+                    f"# Limit compute-hijack actions via permission boundary or SCP:\n"
+                    f"# Action = {path.required_actions}\n"
+                    f'# Effect = "Deny"\n'
+                    f'# Condition = {{ Bool = {{ "aws:MultiFactorAuthPresent" = "false" }} }}'
+                )
+            elif path.category.value == "lateral_assume_role":
+                cli_fix = (
+                    f"# Tighten trust policy on role '{path.principal_name}':\n"
+                    f"# 1. Replace wildcard/root principals with specific ARNs.\n"
+                    f"# 2. Add sts:ExternalId condition for cross-account roles.\n"
+                    f"# 3. Require aws:MultiFactorAuthPresent = true for sensitive roles.\n"
+                    f"# Update via: aws iam update-assume-role-policy "
+                    f"--role-name {path.principal_name} --policy-document file://trust-policy.json"
+                )
+                tf_fix = (
+                    "# Example hardened trust policy (replace with concrete principals):\n"
+                    'data "aws_iam_policy_document" "assume_role" {\n'
+                    "  statement {\n"
+                    '    effect = "Allow"\n'
+                    "    principals {\n"
+                    '      type        = "AWS"\n'
+                    '      identifiers = ["arn:aws:iam::ACCOUNT:role/specific-caller"]\n'
+                    "    }\n"
+                    '    actions = ["sts:AssumeRole"]\n'
+                    "    condition {\n"
+                    '      test     = "StringEquals"\n'
+                    '      variable = "sts:ExternalId"\n'
+                    '      values   = ["unique-shared-secret"]\n'
+                    "    }\n"
+                    "    condition {\n"
+                    '      test     = "Bool"\n'
+                    '      variable = "aws:MultiFactorAuthPresent"\n'
+                    '      values   = ["true"]\n'
+                    "    }\n"
+                    "  }\n"
+                    "}"
+                )
             else:
                 cli_fix = (
                     f"# Remove {', '.join(path.required_actions)} from "

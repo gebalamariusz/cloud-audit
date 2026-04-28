@@ -103,7 +103,7 @@ cloud-audit simulate --fix aws-vpc-002
 
 | Feature | What it does |
 |---|---|
-| **IAM Privilege Escalation** | 25 escalation methods across 6 categories. PMapper has been dead since 2022 -- this is its open-source replacement. |
+| **IAM Privilege Escalation** | 61 escalation methods across 9 categories, including lateral movement detection via AssumeRole graph traversal. PMapper has been dead since 2022 -- this is its open-source replacement, and it covers paths PMapper never did. |
 | **What-If Simulator** | `cloud-audit simulate --fix aws-vpc-002` shows score change, chains broken, and risk reduction before you apply anything. |
 | **Root Cause Grouping** | "Fix 4 things, break 22 chains." Groups findings by shared root cause and ranks by impact. |
 | **Security Posture Trend** | `cloud-audit trend` tracks health score, chains, and risk over time with sparkline visualization. |
@@ -191,7 +191,7 @@ cloud-audit is AWS-only and intentionally narrower (94 curated checks). It goes 
 | Compliance frameworks (AWS) | 41 (CIS, PCI-DSS, HIPAA, SOC2, NIST, ISO 27001, GDPR, FedRAMP, NIS2, ...) | 6 (CIS v3.0, SOC 2, BSI C5, ISO 27001, HIPAA, NIS2) |
 | Auto-remediation | 55 fixers across 17 AWS services (direct API calls) | 94/94 findings with CLI + Terraform output (reviewable, you apply) |
 | Attack path / graph analysis | Prowler App (Cartography + graph queries) | CLI-native (31 rules, no infra) |
-| IAM privilege escalation graph | Prowler App | CLI-native (25 methods) |
+| IAM privilege escalation graph | Prowler App | CLI-native (61 methods + AssumeRole graph) |
 | What-If remediation simulator | No | Yes |
 | AI/ML security checks (Bedrock + SageMaker) | ~20 checks | 5 checks + 3 attack chain rules |
 | Scan diff / drift tracking | Prowler App | Built-in CLI (`cloud-audit diff`) |
@@ -323,7 +323,7 @@ Full docs at **[haitmg.pl/cloud-audit](https://haitmg.pl/cloud-audit/)**:
 
 - **[Getting Started](https://haitmg.pl/cloud-audit/getting-started/installation/)** - installation, quick start, demo mode
 - **[Attack Chains](https://haitmg.pl/cloud-audit/features/attack-chains/)** - all 31 rules with MITRE ATT&CK references
-- **[IAM Escalation](https://haitmg.pl/cloud-audit/features/iam-escalation/)** - 25 methods, 6 categories
+- **[IAM Escalation](https://haitmg.pl/cloud-audit/features/iam-escalation/)** - 61 methods, 9 categories (action-based + lateral AssumeRole graph)
 - **[What-If Simulator](https://haitmg.pl/cloud-audit/features/simulate/)** - simulate remediation impact
 - **[Compliance](https://haitmg.pl/cloud-audit/compliance/overview/)** - 6 frameworks: CIS, SOC 2, BSI C5, ISO 27001, HIPAA, NIS2
 - **[All 94 Checks](https://haitmg.pl/cloud-audit/checks/)** - full check reference by service

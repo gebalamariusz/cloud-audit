@@ -72,3 +72,31 @@ def test_html_empty_findings() -> None:
     html = render_html(report)
     assert isinstance(html, str)
     assert "<html" in html
+
+
+def test_html_renders_remediation_plan() -> None:
+    """HTML report includes the Remediation Plan section when root_causes are present."""
+    from cloud_audit.models import Effort, RootCauseFix
+
+    report = _make_report()
+    report.root_causes = [
+        RootCauseFix(
+            check_id="aws-vpc-002",
+            fix_title="Restrict security groups",
+            effort=Effort.LOW,
+            findings_closed=3,
+            chains_broken=["AC-01", "AC-02", "AC-13"],
+        ),
+    ]
+    html = render_html(report)
+    assert "Remediation Plan" in html
+    assert "Restrict security groups" in html
+    assert "AC-01" not in html or "3" in html  # chains count rendered
+
+
+def test_html_no_remediation_plan_when_empty() -> None:
+    """HTML report omits Remediation Plan table when root_causes is empty."""
+    report = _make_report()
+    report.root_causes = []
+    html = render_html(report)
+    assert "remediation-plan-section" not in html

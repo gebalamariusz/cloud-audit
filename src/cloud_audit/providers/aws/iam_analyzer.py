@@ -9,6 +9,14 @@ References:
 - Cloudsplaining (Salesforce, BSD-3): 21 methods
 - Hacking The Cloud: 40+ methods
 - pathfinding.cloud (Datadog, Apache-2.0): 65 paths
+
+Coverage: 61 detection methods across 9 categories (57 action-based +
+4 lateral). v2.1.0 expanded from 25 methods through three tiers: Tier 1
+added PassRole variants, resource policy abuse, deny-removal patterns,
+and MFA bypass; Tier 2 added new compute primitives (CodeBuild, AppRunner,
+SageMaker, Bedrock, Step Functions), SSM-based compute hijack, and EC2
+Instance Connect; Tier 3 added trust-policy graph analysis with lateral
+movement detection (Direct/Chain AssumeRole, WildcardTrust, CrossAccountRoot).
 """
 
 from __future__ import annotations
@@ -211,6 +219,238 @@ ESCALATION_METHODS: dict[str, _MethodDef] = {
         category=EscalationCategory.PERMISSION_BOUNDARY,
         severity=Severity.HIGH,
         target="Replace permission boundary with permissive one",
+    ),
+    # ---------------------------------------------------------------------
+    # Tier 1 additions (v2.1.0): +20 methods, total 45
+    # Coverage of pathfinding.cloud (Datadog, 66 paths): 38% -> ~68%
+    # ---------------------------------------------------------------------
+    # Category 3 extensions: PassRole + Service variants (10 methods)
+    "PassRole+Glue:CreateJob": _MethodDef(
+        actions=["iam:PassRole", "glue:CreateJob"],
+        category=EscalationCategory.PASSROLE_SERVICE,
+        severity=Severity.HIGH,
+        target="Code execution via Glue Job with privileged role",
+    ),
+    "PassRole+Glue:UpdateJob": _MethodDef(
+        actions=["iam:PassRole", "glue:UpdateJob"],
+        category=EscalationCategory.PASSROLE_SERVICE,
+        severity=Severity.HIGH,
+        target="Hijack existing Glue Job to run with privileged role",
+    ),
+    "PassRole+Glue:CreateSession": _MethodDef(
+        actions=["iam:PassRole", "glue:CreateSession"],
+        category=EscalationCategory.PASSROLE_SERVICE,
+        severity=Severity.HIGH,
+        target="Interactive Spark session running with privileged role",
+    ),
+    "PassRole+ECS:UpdateService": _MethodDef(
+        actions=["iam:PassRole", "ecs:UpdateService", "ecs:RegisterTaskDefinition"],
+        category=EscalationCategory.PASSROLE_SERVICE,
+        severity=Severity.CRITICAL,
+        target="Replace task definition on running ECS service with privileged role",
+    ),
+    "PassRole+ECS:RegisterTaskDefinition": _MethodDef(
+        actions=["iam:PassRole", "ecs:RegisterTaskDefinition"],
+        category=EscalationCategory.PASSROLE_SERVICE,
+        severity=Severity.HIGH,
+        target="Register task definition with privileged role (auto-deploy required)",
+    ),
+    "PassRole+CloudFormation:UpdateStack": _MethodDef(
+        actions=["iam:PassRole", "cloudformation:UpdateStack"],
+        category=EscalationCategory.PASSROLE_SERVICE,
+        severity=Severity.CRITICAL,
+        target="Admin via CloudFormation stack update with privileged role",
+    ),
+    "PassRole+EC2:AssociateInstanceProfile": _MethodDef(
+        actions=["iam:PassRole", "ec2:AssociateIamInstanceProfile"],
+        category=EscalationCategory.PASSROLE_SERVICE,
+        severity=Severity.CRITICAL,
+        target="Attach privileged instance profile to running EC2 instance",
+    ),
+    "PassRole+EC2:ReplaceInstanceProfileAssociation": _MethodDef(
+        actions=["iam:PassRole", "ec2:ReplaceIamInstanceProfileAssociation"],
+        category=EscalationCategory.PASSROLE_SERVICE,
+        severity=Severity.CRITICAL,
+        target="Replace instance profile on running EC2 with privileged role",
+    ),
+    "PassRole+Lambda:CreateEventSourceMapping": _MethodDef(
+        actions=["iam:PassRole", "lambda:CreateFunction", "lambda:CreateEventSourceMapping"],
+        category=EscalationCategory.PASSROLE_SERVICE,
+        severity=Severity.HIGH,
+        target="Trigger privileged Lambda via event source mapping",
+    ),
+    "InstanceProfileRoleSwap": _MethodDef(
+        actions=["iam:RemoveRoleFromInstanceProfile", "iam:AddRoleToInstanceProfile"],
+        category=EscalationCategory.PASSROLE_SERVICE,
+        severity=Severity.HIGH,
+        target="Swap role on existing instance profile to gain privileged role",
+    ),
+    # Category 7: Resource Policy Abuse (NEW category, 2 methods)
+    "Lambda:AddPermission": _MethodDef(
+        actions=["lambda:AddPermission"],
+        category=EscalationCategory.RESOURCE_POLICY_ABUSE,
+        severity=Severity.HIGH,
+        target="Cross-account invocation of privileged Lambda via resource policy",
+    ),
+    "Lambda:AddLayerVersionPermission": _MethodDef(
+        actions=["lambda:AddLayerVersionPermission"],
+        category=EscalationCategory.RESOURCE_POLICY_ABUSE,
+        severity=Severity.HIGH,
+        target="Share malicious Lambda layer used by privileged functions",
+    ),
+    # Category 1 extensions: IAM Self-Mutation (5 methods)
+    "DeleteRolePolicy": _MethodDef(
+        actions=["iam:DeleteRolePolicy", "sts:AssumeRole"],
+        category=EscalationCategory.IAM_SELF_MUTATION,
+        severity=Severity.HIGH,
+        target="Remove blocking inline policy on assumable role",
+    ),
+    "DeleteUserPolicy": _MethodDef(
+        actions=["iam:DeleteUserPolicy"],
+        category=EscalationCategory.IAM_SELF_MUTATION,
+        severity=Severity.HIGH,
+        target="Remove blocking inline policy on a user (deny removal)",
+    ),
+    "DetachRolePolicy": _MethodDef(
+        actions=["iam:DetachRolePolicy", "sts:AssumeRole"],
+        category=EscalationCategory.IAM_SELF_MUTATION,
+        severity=Severity.HIGH,
+        target="Detach blocking managed policy from assumable role",
+    ),
+    "DetachUserPolicy": _MethodDef(
+        actions=["iam:DetachUserPolicy"],
+        category=EscalationCategory.IAM_SELF_MUTATION,
+        severity=Severity.HIGH,
+        target="Detach blocking managed policy from a user (deny removal)",
+    ),
+    "CreateServiceLinkedRole": _MethodDef(
+        actions=["iam:CreateServiceLinkedRole"],
+        category=EscalationCategory.IAM_SELF_MUTATION,
+        severity=Severity.HIGH,
+        target="Create service-linked role with service-managed admin policies",
+    ),
+    # Category 2 extensions: Credential Access (3 methods)
+    "UpdateAccessKey": _MethodDef(
+        actions=["iam:UpdateAccessKey"],
+        category=EscalationCategory.CREDENTIAL_ACCESS,
+        severity=Severity.HIGH,
+        target="Re-enable disabled access key for another user",
+    ),
+    "DeactivateMFADevice": _MethodDef(
+        actions=["iam:DeactivateMFADevice"],
+        category=EscalationCategory.CREDENTIAL_ACCESS,
+        severity=Severity.HIGH,
+        target="Remove MFA from user, bypass MFA-required policies",
+    ),
+    "DeleteVirtualMFADevice": _MethodDef(
+        actions=["iam:DeleteVirtualMFADevice"],
+        category=EscalationCategory.CREDENTIAL_ACCESS,
+        severity=Severity.HIGH,
+        target="Delete virtual MFA device, bypass MFA-required policies",
+    ),
+    # ---------------------------------------------------------------------
+    # Tier 2 additions (v2.1.0): +12 methods, total 57
+    # New compute primitives + SSM + EC2 Instance Connect + Step Functions
+    # Coverage of pathfinding.cloud (Datadog, 66 paths): ~68% -> ~86%
+    # ---------------------------------------------------------------------
+    # Category 3 extensions: PassRole + new compute services (6 methods)
+    "PassRole+CodeBuild:CreateProject": _MethodDef(
+        actions=["iam:PassRole", "codebuild:CreateProject", "codebuild:StartBuild"],
+        category=EscalationCategory.PASSROLE_SERVICE,
+        severity=Severity.CRITICAL,
+        target="Admin via CodeBuild project with privileged role (buildspec exec)",
+    ),
+    "PassRole+AppRunner:CreateService": _MethodDef(
+        actions=["iam:PassRole", "apprunner:CreateService"],
+        category=EscalationCategory.PASSROLE_SERVICE,
+        severity=Severity.CRITICAL,
+        target="Admin via AppRunner container with privileged role",
+    ),
+    "PassRole+SageMaker:CreateNotebookInstance": _MethodDef(
+        actions=["iam:PassRole", "sagemaker:CreateNotebookInstance"],
+        category=EscalationCategory.PASSROLE_SERVICE,
+        severity=Severity.CRITICAL,
+        target="Admin via SageMaker Jupyter notebook with privileged execution role",
+    ),
+    "PassRole+SageMaker:CreateProcessingJob": _MethodDef(
+        actions=["iam:PassRole", "sagemaker:CreateProcessingJob"],
+        category=EscalationCategory.PASSROLE_SERVICE,
+        severity=Severity.HIGH,
+        target="Code execution via SageMaker processing job with privileged role",
+    ),
+    "PassRole+Bedrock:CreateAgent": _MethodDef(
+        actions=["iam:PassRole", "bedrock:CreateAgent"],
+        category=EscalationCategory.PASSROLE_SERVICE,
+        severity=Severity.HIGH,
+        target="Admin via Bedrock agent invoking AWS APIs with privileged role",
+    ),
+    "PassRole+StepFunctions:CreateStateMachine": _MethodDef(
+        actions=["iam:PassRole", "states:CreateStateMachine"],
+        category=EscalationCategory.PASSROLE_SERVICE,
+        severity=Severity.CRITICAL,
+        target="Admin via Step Functions state machine with privileged role",
+    ),
+    # Category 8: Compute Hijack (NEW category, 5 methods)
+    # Exploit existing compute that already has a privileged role attached.
+    # No PassRole required - the role is already on the target instance/service.
+    "SSM:SendCommand": _MethodDef(
+        actions=["ssm:SendCommand"],
+        category=EscalationCategory.COMPUTE_HIJACK,
+        severity=Severity.HIGH,
+        target="Execute arbitrary commands on managed EC2 with its instance role",
+    ),
+    "SSM:StartSession": _MethodDef(
+        actions=["ssm:StartSession"],
+        category=EscalationCategory.COMPUTE_HIJACK,
+        severity=Severity.HIGH,
+        target="Interactive shell on managed EC2 inheriting its instance role",
+    ),
+    "EC2InstanceConnect:SendSSHPublicKey": _MethodDef(
+        actions=["ec2-instance-connect:SendSSHPublicKey"],
+        category=EscalationCategory.COMPUTE_HIJACK,
+        severity=Severity.HIGH,
+        target="Push SSH key to EC2 and login with its instance role",
+    ),
+    "CodeBuild:UpdateProject": _MethodDef(
+        actions=["codebuild:UpdateProject", "codebuild:StartBuild"],
+        category=EscalationCategory.COMPUTE_HIJACK,
+        severity=Severity.CRITICAL,
+        target="Hijack existing CodeBuild project to run arbitrary code with its role",
+    ),
+    "AppRunner:UpdateService": _MethodDef(
+        actions=["apprunner:UpdateService"],
+        category=EscalationCategory.COMPUTE_HIJACK,
+        severity=Severity.HIGH,
+        target="Replace running AppRunner service image, retain privileged role",
+    ),
+    # Category 2 extension: Credential Access via Parameter Store (1 method)
+    "SSM:GetParameter": _MethodDef(
+        actions=["ssm:GetParameter"],
+        category=EscalationCategory.CREDENTIAL_ACCESS,
+        severity=Severity.HIGH,
+        target="Read secrets stored in SSM Parameter Store (DB creds, API keys)",
+    ),
+    # ---------------------------------------------------------------------
+    # Tier 2 extensions (post-benchmark): +3 methods, total 60
+    # Coverage parity with Bishop Fox IAM Vulnerable extra paths
+    # ---------------------------------------------------------------------
+    "Glue:UpdateDevEndpoint": _MethodDef(
+        actions=["glue:UpdateDevEndpoint"],
+        category=EscalationCategory.COMPUTE_HIJACK,
+        severity=Severity.HIGH,
+        target="Hijack existing Glue dev endpoint to run code with its role",
+    ),
+    "SageMaker:CreatePresignedNotebookUrl": _MethodDef(
+        actions=["sagemaker:CreatePresignedNotebookInstanceUrl"],
+        category=EscalationCategory.COMPUTE_HIJACK,
+        severity=Severity.HIGH,
+        target="Generate presigned URL for existing SageMaker notebook, gain access with its role",
+    ),
+    "PassRole+SageMaker:CreateTrainingJob": _MethodDef(
+        actions=["iam:PassRole", "sagemaker:CreateTrainingJob"],
+        category=EscalationCategory.PASSROLE_SERVICE,
+        severity=Severity.HIGH,
+        target="Code execution via SageMaker training job with privileged role",
     ),
 }
 
@@ -439,12 +679,26 @@ def detect_escalation_paths(principals: list[ResolvedPrincipal]) -> list[Escalat
 
 
 def analyze_escalation(provider: AWSProvider) -> list[EscalationPath]:
-    """Run the full escalation analysis pipeline. Caches result for correlation engine."""
+    """Run the full escalation analysis pipeline. Caches result for correlation engine.
+
+    Two-stage detection:
+    1. Action-based escalation via ESCALATION_METHODS catalog (57 methods)
+    2. Lateral movement via AssumeRole trust graph (4 methods)
+    """
     global _escalation_cache
+
+    from cloud_audit.providers.aws.iam_trust_graph import (
+        build_assume_role_graph,
+        find_lateral_escalations,
+    )
 
     auth_details = get_authorization_details(provider)
     principals = resolve_principals(auth_details)
     paths = detect_escalation_paths(principals)
+
+    # Tier 3: lateral escalation via trust policy graph
+    graph = build_assume_role_graph(auth_details)
+    paths.extend(find_lateral_escalations(graph, principals))
 
     with _escalation_lock:
         _escalation_cache = paths
