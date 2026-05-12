@@ -173,7 +173,6 @@ def _scan_region(provider: AWSProvider, region: str) -> tuple[int, list[Finding]
         name = identity.get("IdentityName", "")
         if not name:
             continue
-        identity_type = identity.get("IdentityType", "EMAIL_ADDRESS")  # EMAIL_ADDRESS or DOMAIN
         if not identity.get("VerifiedForSendingStatus", False):
             continue  # Pending/failed identities aren't usable for phishing
 

@@ -43,10 +43,10 @@ def _iam(
 
     iam.get_paginator.side_effect = get_paginator
 
-    def list_attached_user(UserName: str) -> dict[str, Any]:  # noqa: N803
+    def list_attached_user(UserName: str) -> dict[str, Any]:
         return {"AttachedPolicies": [{"PolicyArn": a} for a in user_attachments.get(UserName, [])]}
 
-    def list_attached_role(RoleName: str) -> dict[str, Any]:  # noqa: N803
+    def list_attached_role(RoleName: str) -> dict[str, Any]:
         return {"AttachedPolicies": [{"PolicyArn": a} for a in role_attachments.get(RoleName, [])]}
 
     iam.list_attached_user_policies.side_effect = list_attached_user

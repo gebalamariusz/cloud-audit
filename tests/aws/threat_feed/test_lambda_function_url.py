@@ -32,7 +32,7 @@ def _lambda_client(
             super().__init__("ResourceNotFoundException")
             self.response = {"Error": {"Code": "ResourceNotFoundException"}}
 
-    def get_url_cfg(FunctionName: str) -> dict[str, Any]:  # noqa: N803 (boto3 signature)
+    def get_url_cfg(FunctionName: str) -> dict[str, Any]:
         if FunctionName in url_configs:
             return url_configs[FunctionName]
         raise _NotFound()
@@ -45,7 +45,7 @@ def _iam_client(role_attachments: dict[str, list[dict[str, str]]] | None = None)
     role_attachments = role_attachments or {}
     iam = MagicMock()
 
-    def list_attached(RoleName: str) -> dict[str, Any]:  # noqa: N803
+    def list_attached(RoleName: str) -> dict[str, Any]:
         return {"AttachedPolicies": role_attachments.get(RoleName, [])}
 
     iam.list_attached_role_policies.side_effect = list_attached
@@ -212,7 +212,7 @@ def test_multi_region_scan() -> None:
 
     call_count = {"n": 0}
 
-    def get_url_cfg(FunctionName: str) -> dict[str, Any]:  # noqa: N803
+    def get_url_cfg(FunctionName: str) -> dict[str, Any]:
         call_count["n"] += 1
         # First region returns config, second region returns NotFound
         if call_count["n"] == 1:

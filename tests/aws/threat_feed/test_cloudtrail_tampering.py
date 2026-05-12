@@ -14,7 +14,7 @@ def _ct_client(trails: list[dict[str, Any]], statuses: dict[str, dict[str, Any]]
     ct = MagicMock()
     ct.describe_trails.return_value = {"trailList": trails}
 
-    def get_status(Name: str) -> dict[str, Any]:  # noqa: N803
+    def get_status(Name: str) -> dict[str, Any]:
         # Match by ARN or by short name
         for key, status in statuses.items():
             if Name.endswith(key) or Name == key:

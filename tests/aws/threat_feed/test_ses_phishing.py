@@ -30,7 +30,7 @@ def _ses_client(
     ses.get_account.return_value = {"ProductionAccessEnabled": out_of_sandbox}
     ses.list_email_identities.return_value = {"EmailIdentities": identities}
 
-    def get_identity(EmailIdentity: str) -> dict[str, Any]:  # noqa: N803
+    def get_identity(EmailIdentity: str) -> dict[str, Any]:
         return details.get(EmailIdentity, {})
 
     ses.get_email_identity.side_effect = get_identity

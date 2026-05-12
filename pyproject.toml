@@ -81,6 +81,13 @@ select = ["E", "F", "I", "N", "W", "UP", "S", "B", "A", "C4", "SIM", "TCH", "RUF
 "src/cloud_audit/reports/compliance_markdown.py" = ["E501"]
 "src/cloud_audit/cli.py" = ["TC003"]
 "src/cloud_audit/mcp_server.py" = ["TC003"]
+# Threat-feed modules and tests intentionally use boto3-style CamelCase
+# kwargs (UserName, RoleName, FunctionName, EmailIdentity) to match the
+# AWS API surface they wrap. N803 (lower_snake_case argument) is wrong here.
+# Inner exception classes used to simulate boto3 errors don't need the
+# Error suffix N818 mandates. Lambda/SES helpers also use Optional implicitly.
+"src/cloud_audit/providers/aws/threat_feed/*.py" = ["N803", "N818", "RUF013", "E501", "S112"]
+"tests/aws/threat_feed/*.py" = ["S101", "N803", "N806", "N818", "RUF013", "E501", "TC003", "E402"]
 "tests/**" = ["S101", "TC003", "E402"]
 
 [tool.mypy]

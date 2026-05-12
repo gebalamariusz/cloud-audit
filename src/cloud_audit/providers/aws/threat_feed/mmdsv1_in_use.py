@@ -153,7 +153,7 @@ def _build_agentcore_finding(agent_id: str, agent_name: str, region: str) -> Fin
             effort=Effort.LOW,
         ),
         threat_pattern_id=PATTERN_ID,
-        references=_REFERENCES + ["https://thehackernews.com/2026/03/ai-flaws-in-amazon-bedrock-langsmith.html"],
+        references=[*_REFERENCES, "https://thehackernews.com/2026/03/ai-flaws-in-amazon-bedrock-langsmith.html"],
     )
 
 

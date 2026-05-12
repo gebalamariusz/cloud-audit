@@ -32,7 +32,7 @@ def _iam(roles: list[dict[str, Any]], attachments: dict[str, list[str]] | None =
     iam = MagicMock()
     iam.get_paginator.return_value = _paginator([{"Roles": roles}])
 
-    def list_attached(RoleName: str) -> dict[str, Any]:  # noqa: N803
+    def list_attached(RoleName: str) -> dict[str, Any]:
         return {"AttachedPolicies": [{"PolicyArn": a} for a in attachments.get(RoleName, [])]}
 
     iam.list_attached_role_policies.side_effect = list_attached
