@@ -36,6 +36,7 @@
   <a href="https://haitmg.pl/cloud-audit/compliance/overview/">Compliance</a> -
   <a href="https://haitmg.pl/cloud-audit/features/attack-chains/">Attack Chains</a> -
   <a href="https://haitmg.pl/cloud-audit/features/iam-escalation/">IAM Escalation</a> -
+  <a href="https://haitmg.pl/cloud-audit/features/threat-feed/">Threat Feed</a> -
   <a href="https://haitmg.pl/cloud-audit/features/simulate/">Simulator</a> -
   <a href="https://haitmg.pl/cloud-audit/features/mcp-server/">MCP Server</a>
 </p>
@@ -52,6 +53,21 @@ Uses your default AWS credentials and region. Try without an AWS account:
 ```bash
 cloud-audit demo
 ```
+
+### NEW in v2.2: Threat Feed
+
+Detect ACTIVE abuse patterns from 2025-2026 incidents (cryptomining campaigns,
+SES phishing setup, leaked-credential scanner activity, AgentCore CVEs):
+
+```bash
+cloud-audit threat-feed              # scan all 10 patterns
+cloud-audit threat-feed --list       # show registered patterns
+cloud-audit threat-feed --pattern aws-tf-003   # one pattern only
+```
+
+Each pattern carries external research references (Wiz, Datadog Security Labs,
+Unit 42, Permiso) on every finding. Exit code 1 when CRITICAL/HIGH detected
+(CI gate friendly). See [Threat Feed docs](https://haitmg.pl/cloud-audit/features/threat-feed/).
 
 ---
 
