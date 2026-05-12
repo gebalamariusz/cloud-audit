@@ -35,6 +35,7 @@ from cloud_audit.providers.aws.threat_feed import (
     quarantine_policy,
     roles_anywhere_abuse,
     ses_phishing,
+    trufflehog_ua,
     whoami_confusion,
 )
 from cloud_audit.providers.base import make_check
@@ -54,6 +55,7 @@ _PATTERN_MODULES = [
     ses_phishing,
     lambda_function_url,
     quarantine_policy,
+    trufflehog_ua,
     mmdsv1_in_use,
     whoami_confusion,
     cloudtrail_tampering,
