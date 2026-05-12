@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 import boto3
 from botocore.config import Config
 
+from cloud_audit.providers.aws import threat_feed
 from cloud_audit.providers.aws.checks import (
     account,
     backup,
@@ -65,6 +66,7 @@ _CHECK_MODULES = [
     waf,
     bedrock,
     sagemaker,
+    threat_feed,
 ]
 
 
