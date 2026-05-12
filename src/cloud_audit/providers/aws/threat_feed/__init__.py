@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING
 from cloud_audit.models import Category
 from cloud_audit.providers.aws.threat_feed import (
     cloudtrail_tampering,
+    cryptomining_role,
     datazone_overgrant,
     lambda_function_url,
     mmdsv1_in_use,
@@ -56,6 +57,7 @@ _PATTERN_MODULES = [
     lambda_function_url,
     quarantine_policy,
     trufflehog_ua,
+    cryptomining_role,
     mmdsv1_in_use,
     whoami_confusion,
     cloudtrail_tampering,
