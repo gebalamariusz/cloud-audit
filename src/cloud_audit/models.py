@@ -22,6 +22,7 @@ class Category(str, Enum):
     COST = "cost"
     RELIABILITY = "reliability"
     PERFORMANCE = "performance"
+    THREAT = "threat"
 
 
 class Effort(str, Enum):
@@ -75,6 +76,14 @@ class Finding(BaseModel):
     remediation: Remediation | None = Field(default=None, description="Structured remediation details")
     compliance_refs: list[str] = Field(default_factory=list, description="Compliance references, e.g. ['CIS 1.5']")
     cost_estimate: CostEstimateData | None = Field(default=None, description="Estimated breach cost range")
+    threat_pattern_id: str | None = Field(
+        default=None,
+        description="Threat feed pattern identifier, e.g. 'TF-003-quarantine-policy' (None for regular checks)",
+    )
+    references: list[str] = Field(
+        default_factory=list,
+        description="External references (research reports, CVE links, blog posts) backing this finding",
+    )
 
 
 class CheckResult(BaseModel):

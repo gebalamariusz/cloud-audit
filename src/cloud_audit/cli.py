@@ -1448,6 +1448,145 @@ def simulate(
     console.print()
 
 
+@app.command(name="threat-feed")
+def threat_feed_cmd(
+    profile: Annotated[str | None, typer.Option("--profile", help="AWS profile")] = None,
+    regions: Annotated[
+        str | None,
+        typer.Option("--regions", "-r", help="Comma-separated regions, or 'all' for every enabled region"),
+    ] = None,
+    pattern: Annotated[
+        str | None,
+        typer.Option("--pattern", help="Run only one pattern (e.g. aws-tf-003); default = all"),
+    ] = None,
+    list_patterns: Annotated[
+        bool,
+        typer.Option("--list", help="List registered patterns and exit (no scan)"),
+    ] = False,
+    threat_feed_version: Annotated[
+        str | None,
+        typer.Option("--threat-feed-version", help="Pin a rules-pack version (informational, default = current)"),
+    ] = None,
+) -> None:
+    """Detect ACTIVE abuse patterns from 2025-2026 threat reports.
+
+    Distinct from regular `scan`: looks for indicators that an attacker has ALREADY
+    acted on the account (quarantine policies AWS attached after credential leak,
+    public Lambda URLs created as persistence, DataZone over-grants, etc.) rather
+    than mere misconfigurations.
+
+    Examples:
+        cloud-audit threat-feed                       # scan all patterns
+        cloud-audit threat-feed --pattern aws-tf-003  # one pattern only
+        cloud-audit threat-feed --list                # show registered patterns
+    """
+    from cloud_audit.providers.aws import threat_feed as tf_module
+
+    if list_patterns:
+        table = Table(title=f"Registered threat patterns (rules pack {tf_module.THREAT_FEED_VERSION})")
+        table.add_column("Pattern ID", style="bold")
+        table.add_column("Check ID")
+        table.add_column("Severity")
+        table.add_column("Name")
+        table.add_column("Doc")
+        for p in tf_module.list_patterns():
+            sev_color = SEVERITY_COLORS.get(Severity(p["severity"]), "white")
+            table.add_row(
+                p["pattern_id"],
+                p["check_id"],
+                f"[{sev_color}]{p['severity'].upper()}[/{sev_color}]",
+                p["name"],
+                p["doc_url"],
+            )
+        console.print(table)
+        console.print(f"\n[dim]{len(tf_module.list_patterns())} patterns registered.[/dim]")
+        return
+
+    active_version = threat_feed_version or tf_module.THREAT_FEED_VERSION
+    if threat_feed_version and threat_feed_version != tf_module.THREAT_FEED_VERSION:
+        console.print(
+            f"[yellow]Note: requested rules pack '{threat_feed_version}' differs from installed "
+            f"'{tf_module.THREAT_FEED_VERSION}'. Pinning is informational in this build.[/yellow]"
+        )
+
+    from cloud_audit.providers.aws.provider import AWSProvider
+
+    region_list = None
+    if regions:
+        region_list = ["all"] if regions.strip() == "all" else [r.strip() for r in regions.split(",")]
+
+    try:
+        provider = AWSProvider(profile=profile, regions=region_list)
+    except Exception as exc:
+        console.print(f"[red]Failed to initialize AWS provider: {exc}[/red]")
+        raise typer.Exit(2) from exc
+
+    threat_checks = [c for c in provider.get_checks() if getattr(c, "category", None) and c.category.value == "threat"]
+    if pattern:
+        threat_checks = [c for c in threat_checks if c.check_id == pattern]
+        if not threat_checks:
+            console.print(f"[red]No registered threat pattern with check_id '{pattern}'.[/red]")
+            console.print("Run [cyan]cloud-audit threat-feed --list[/cyan] to see available patterns.")
+            raise typer.Exit(2)
+
+    console.print(
+        Panel(
+            f"Scanning [bold]{len(threat_checks)}[/bold] threat patterns (rules pack [cyan]{active_version}[/cyan])",
+            title="[bold]Threat Feed[/bold]",
+            border_style="magenta",
+        )
+    )
+
+    all_findings: list[Finding] = []
+    errors: list[tuple[str, str]] = []
+    for check in threat_checks:
+        try:
+            result = check()
+        except Exception as exc:  # defensive - check should already capture
+            errors.append((check.check_id, str(exc)))
+            continue
+        if result.error:
+            errors.append((check.check_id, result.error))
+        all_findings.extend(result.findings)
+
+    if errors:
+        console.print()
+        for check_id, err in errors:
+            console.print(f"[yellow]! {check_id}: {err}[/yellow]")
+
+    if not all_findings:
+        console.print("\n[green]No active abuse patterns detected.[/green]\n")
+        raise typer.Exit(0)
+
+    table = Table(title=f"Detected threat patterns ({len(all_findings)} findings)", show_lines=True)
+    table.add_column("Severity", no_wrap=True)
+    table.add_column("Pattern", style="bold")
+    table.add_column("Resource")
+    table.add_column("Region")
+    table.add_column("References")
+
+    for f in sorted(all_findings, key=lambda x: list(SEVERITY_COLORS).index(x.severity)):
+        sev_color = SEVERITY_COLORS[f.severity]
+        refs = "\n".join(f.references[:2]) if f.references else "-"
+        table.add_row(
+            f"[{sev_color}]{f.severity.value.upper()}[/{sev_color}]",
+            f"{f.threat_pattern_id or f.check_id}\n[dim]{rich_escape(f.title)}[/dim]",
+            rich_escape(f.resource_id),
+            f.region,
+            refs,
+        )
+
+    console.print(table)
+    console.print(
+        "\n[dim]Use [cyan]cloud-audit scan --categories threat -o json[/cyan] for machine-readable output "
+        "(includes full remediation + references).[/dim]\n"
+    )
+
+    # Exit 1 when CRITICAL/HIGH detected (CI gate)
+    blocking = [f for f in all_findings if f.severity in (Severity.CRITICAL, Severity.HIGH)]
+    raise typer.Exit(1 if blocking else 0)
+
+
 @app.command()
 def version() -> None:
     """Show version."""

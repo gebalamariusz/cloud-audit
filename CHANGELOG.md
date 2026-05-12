@@ -7,6 +7,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-05-12
+
+### Added
+
+- **Threat Feed v1** — new `cloud-audit threat-feed` command and a dedicated
+  detector pipeline (`providers/aws/threat_feed/`) that flags ACTIVE abuse
+  indicators rather than misconfiguration. Each pattern has a versioned
+  `TF-XXX` ID, maps to the new `Category.THREAT`, and carries external
+  references (research reports, CVE links) on every Finding for credibility.
+  Rules pack version: **2026-Q2**.
+
+  Ten patterns shipped:
+
+  - `TF-001-ses-phishing-setup` (MEDIUM/HIGH) — SES email/domain identities
+    verified within the last 14 days, with severity escalating when an
+    out-of-sandbox account hosts a typosquat-style email identity that has
+    no matching domain identity. Tracks the Wiz May 2025 + BleepingComputer
+    May 2026 SES abuse campaigns.
+  - `TF-002-lambda-function-url-persistence` (HIGH/CRITICAL) — Lambda
+    functions exposed via `AuthType=NONE` Function URLs, escalating to
+    CRITICAL when the execution role grants admin-class permissions
+    (matching the role profile of the Nov-Dec 2025 cryptomining campaign).
+  - `TF-003-quarantine-policy` (CRITICAL) — IAM principals with
+    `AWSCompromisedKeyQuarantineV1/V2/V3` attached. AWS auto-attaches these
+    after detecting credential exposure (typically a public GitHub commit).
+  - `TF-004-trufflehog-ua-cloudtrail` (CRITICAL) — `sts:GetCallerIdentity`
+    calls in the last 24h whose user-agent matches known leaked-credentials
+    discovery scanners (TruffleHog, gitleaks, CloudGrappler, DetentionDodger,
+    NoseyParker). Confirmed credential validation by an external scanner.
+  - `TF-005-cryptomining-role` (HIGH/CRITICAL) — IAM roles created within
+    the last 48 hours that carry broad compute managed policies (EC2 Full,
+    PowerUser, Admin, ECS Full, Lambda Full). Escalates to CRITICAL when
+    the same role also has SES sending permissions (mining + email-spam
+    combo from the documented late-2025 campaign cluster).
+  - `TF-006-mmdsv1-in-use` (HIGH/CRITICAL) — EC2 instances where
+    `HttpTokens != required` (IMDSv1 still callable) and Bedrock AgentCore
+    agents on `metadataVersion=v1` (CRITICAL — addresses Unit 42 'Cracks in
+    the Bedrock' research and the Feb 2026 MMDSv2 default).
+  - `TF-007-whoami-confusion` (MEDIUM) — IAM roles trusted by CI/CD
+    identities (codebuild service principals, GitHub OIDC, GitLab OIDC,
+    Buildkite federation) that have a broad EC2 managed policy attached —
+    the precondition for the Datadog Feb 2025 whoAMI confusion attack.
+  - `TF-008-cloudtrail-tampering` (HIGH/CRITICAL) — CloudTrail trails with
+    `IsLogging=False` (CRITICAL — canonical post-credential-theft attacker
+    behaviour, AiTM phishing follow-on per Datadog March 2026) or with a
+    populated `LatestDeliveryError` (HIGH — S3 destination broken).
+  - `TF-009-roles-anywhere-abuse` (HIGH/MEDIUM) — IAM Roles Anywhere trust
+    anchors with `sourceType=CERTIFICATE_BUNDLE` instead of the recommended
+    AWS_ACM_PCA. Anyone able to issue a chain-valid cert can mint AWS
+    credentials (fwd:cloudsec 2025 'Let's Encrypt for AWS Console').
+  - `TF-010-datazone-overgrant` (HIGH) — `AmazonDataZoneFullAccess` attached
+    to non-admin principals (the "easy" onboarding policy that bridges
+    identity, Glue catalog, and S3 storage in a single grant).
+
+  CLI: `cloud-audit threat-feed [--list] [--pattern <id>] [--regions ...]
+  [--profile ...] [--threat-feed-version 2026-Q2]`. Exits 1 when CRITICAL
+  or HIGH detected (CI gate friendly). Patterns also surface in standard
+  `cloud-audit scan --categories threat` output (JSON, SARIF, HTML).
+
+### Changed
+
+- `Category` enum gains `THREAT` value for active-abuse findings (separate
+  from `SECURITY` misconfiguration).
+- `Finding` model gains `threat_pattern_id: str | None` and
+  `references: list[str]` for backing research links.
+- 23rd registered AWS check module (`threat_feed`) loaded by `AWSProvider`.
+
+### Tests
+
+- 638 -> 742 (+104). Each pattern ships 9-12 unit tests covering positive
+  detection, negative cases, false-positive guards, severity escalation,
+  multi-resource aggregation, AccessDenied resilience, and metadata
+  exposure.
+
 ## [2.1.0] - 2026-04-28
 
 ### Added
