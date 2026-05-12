@@ -34,6 +34,7 @@ from cloud_audit.providers.aws.threat_feed import (
     mmdsv1_in_use,
     quarantine_policy,
     roles_anywhere_abuse,
+    ses_phishing,
     whoami_confusion,
 )
 from cloud_audit.providers.base import make_check
@@ -50,6 +51,7 @@ to get reproducible scans across releases.
 """
 
 _PATTERN_MODULES = [
+    ses_phishing,
     lambda_function_url,
     quarantine_policy,
     mmdsv1_in_use,
