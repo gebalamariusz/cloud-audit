@@ -116,7 +116,7 @@ def _trust_label(trust_policy: dict[str, Any]) -> str:
         if services:
             ci_svc = next((s for s in services if s in _CI_SERVICE_PRINCIPALS), None)
             if ci_svc:
-                return ci_svc.split(".", 1)[0]
+                return str(ci_svc).split(".", 1)[0]
         federated = principal.get("Federated", [])
         if isinstance(federated, str):
             federated = [federated]

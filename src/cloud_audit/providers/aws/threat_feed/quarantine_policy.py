@@ -19,7 +19,7 @@ References:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from cloud_audit.models import Category, CheckResult, Effort, Finding, Remediation, Severity
 
@@ -106,7 +106,7 @@ def _build_finding(
 
 
 def _check_attached_policies(
-    attached: list[dict],
+    attached: list[dict[str, Any]],
     principal_arn: str,
     principal_name: str,
     principal_type: str,
