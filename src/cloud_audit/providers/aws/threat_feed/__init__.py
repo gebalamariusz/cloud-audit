@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING
 
 from cloud_audit.models import Category
 from cloud_audit.providers.aws.threat_feed import (
+    cloudtrail_tampering,
     datazone_overgrant,
     lambda_function_url,
     mmdsv1_in_use,
@@ -53,6 +54,7 @@ _PATTERN_MODULES = [
     quarantine_policy,
     mmdsv1_in_use,
     whoami_confusion,
+    cloudtrail_tampering,
     roles_anywhere_abuse,
     datazone_overgrant,
 ]
