@@ -136,3 +136,21 @@ def test_pattern_metadata_exposed() -> None:
     assert trufflehog_ua.PATTERN_ID == "TF-004-trufflehog-ua-cloudtrail"
     assert trufflehog_ua.CHECK_ID == "aws-tf-004"
     assert trufflehog_ua.PATTERN_SEVERITY == Severity.CRITICAL
+
+
+def test_cloudgrappler_ua_not_flagged() -> None:
+    """v2.2.1: defensive tools (Permiso CloudGrappler) must NOT be flagged.
+
+    Their UA appearing in CloudTrail means a defender is running them
+    against the account, not that the account is under attack.
+    """
+    ct = _ct_with_events(events=[_event("cloudgrappler/1.0")])
+    result = trufflehog_ua.detect(_provider(ct))
+    assert result.findings == []
+
+
+def test_detention_dodger_ua_not_flagged() -> None:
+    """v2.2.1: defensive tools (Permiso DetentionDodger) must NOT be flagged."""
+    ct = _ct_with_events(events=[_event("detention-dodger/1.0")])
+    result = trufflehog_ua.detect(_provider(ct))
+    assert result.findings == []

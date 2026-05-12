@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cloud-audit"
-version = "2.2.0"
+version = "2.2.1"
 description = "Open-source AWS security scanner. Threat Feed v1 (10 active-abuse patterns from 2025-2026 incidents), 64 IAM escalation methods, What-If simulator, security trends, AI-SPM (Bedrock/SageMaker), 6 compliance frameworks, 31 attack chain rules, breach cost estimation, and MCP server. Every finding includes CLI + Terraform remediation."
 readme = "README.md"
 license = "MIT"

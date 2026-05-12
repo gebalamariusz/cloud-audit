@@ -1,22 +1,28 @@
 """TF-001: SES phishing setup precursors.
 
-The SES abuse campaigns documented by Wiz (May 2025) and BleepingComputer
+The SES abuse campaigns documented by Wiz (September 2025) and BleepingComputer
 (May 2026) follow a consistent pattern: an attacker compromises AWS
-credentials, calls GetSendQuota to confirm out-of-sandbox status, verifies
-a fresh email or domain identity (often a typosquat of a trusted brand),
-and blasts phishing through SES so messages arrive with the trust signal
-of AWS-IP-sourced delivery.
+credentials, calls GetSendQuota to confirm out-of-sandbox status, then -
+per Wiz's direct quote - "adds multiple domains as verified identities
+using the CreateEmailIdentity API" so they can blast phishing through SES
+from common prefixes (admin@, billing@, sales@, noreply@) on those domains.
 
 We surface the precursor that is visible from the control plane: SES email
-identities verified RECENTLY in an account that has production sending
-enabled. We do not have visibility into whether the identity is benign
-(legitimate marketing setup) or malicious - we flag at MEDIUM and let the
-operator triage.
+or domain identities verified RECENTLY. We do not have visibility into
+whether the identity is benign (legitimate marketing setup) or malicious -
+we flag at MEDIUM and let the operator triage.
 
-Two stronger sub-signals raise severity to HIGH when present:
-- Identity is an email address that doesn't match a domain identity in the
-  same account (typosquats / one-off addresses are red flags)
-- Account has elevated send quota (production sending out of sandbox)
+Severity escalates to HIGH when BOTH of these are true:
+- The account has production sending enabled (out of SES sandbox), so
+  abuse would reach external recipients without the per-recipient
+  verify-first restriction.
+- The account has TWO OR MORE identities verified in the recent window
+  (the "burst" pattern Wiz documented - attackers add multiple domains
+  in quick succession, not one).
+
+Severity does NOT escalate on "email identity without matching domain"
+(an earlier draft of this detector used that signal - it was wrong;
+Wiz documented attackers verifying domains, not single-email typosquats).
 
 References:
     - https://www.wiz.io/blog/wiz-discovers-cloud-email-abuse-campaign
@@ -51,20 +57,25 @@ _RECENT_DAYS = 14
 14 days catches campaign-style bursts without flagging legitimate identities
 that have been around for months."""
 
+_BURST_THRESHOLD = 2
+"""Number of recent verifications that triggers HIGH severity escalation.
+
+Wiz documented attackers "adding multiple domains as verified identities"
+in quick succession. Two or more recent verifications in the same account
+matches that burst signature."""
+
 
 def _build_finding(
     identity_name: str,
     identity_type: str,
     region: str,
-    created_at: datetime | None,
+    created_at: datetime,
     out_of_sandbox: bool,
-    is_email_no_matching_domain: bool,
+    recent_burst_count: int,
 ) -> Finding:
-    severity = Severity.HIGH if (out_of_sandbox and is_email_no_matching_domain) else PATTERN_SEVERITY
-    age_str = "unknown age"
-    if created_at:
-        age_days = (datetime.now(timezone.utc) - created_at).days
-        age_str = f"verified {age_days} days ago"
+    is_burst = recent_burst_count >= _BURST_THRESHOLD
+    severity = Severity.HIGH if (out_of_sandbox and is_burst) else PATTERN_SEVERITY
+    age_days = (datetime.now(timezone.utc) - created_at).days
 
     sandbox_note = (
         " The account has production sending enabled (out of SES sandbox), so messages "
@@ -73,11 +84,11 @@ def _build_finding(
         if out_of_sandbox
         else " The account is still in SES sandbox - external impact limited."
     )
-    typosquat_note = (
-        " The identity is an EMAIL address with no matching DOMAIN identity in the same "
-        "account - a common typosquat / one-off setup pattern in attacker-driven SES "
-        "abuse campaigns."
-        if is_email_no_matching_domain
+    burst_note = (
+        f" {recent_burst_count} identities have been verified in this account in the last "
+        f"{_RECENT_DAYS} days - a burst pattern matching Wiz's documented incident where "
+        "attackers added multiple domains as verified identities in quick succession."
+        if is_burst
         else ""
     )
     return Finding(
@@ -89,12 +100,12 @@ def _build_finding(
         resource_id=f"ses:{region}:{identity_name}",
         region=region,
         description=(
-            f"SES identity '{identity_name}' ({age_str}) is verified in {region}. The Wiz "
-            "May 2025 research and BleepingComputer May 2026 follow-up document a "
-            "consistent SES abuse pattern in stolen-credential incidents: attackers verify "
-            "a fresh identity to send phishing through SES so messages carry AWS IP "
-            f"reputation.{sandbox_note}{typosquat_note} Confirm the identity was created "
-            "by an authorized operator."
+            f"SES identity '{identity_name}' was verified {age_days} days ago in {region}. "
+            "The Wiz September 2025 research and BleepingComputer May 2026 follow-up "
+            "document a consistent SES abuse pattern in stolen-credential incidents: "
+            "attackers verify SES identities and blast phishing through SES so messages "
+            f"carry AWS IP reputation.{sandbox_note}{burst_note} Confirm the verification "
+            "was performed by an authorized operator."
         ),
         recommendation=(
             "(1) Confirm the verification was authorized by your team. (2) If unexpected, "
@@ -163,39 +174,39 @@ def _scan_region(provider: AWSProvider, region: str) -> tuple[int, list[Finding]
             return 0, []
         raise
 
-    # Build set of verified domains (for typosquat detection)
-    verified_domains = {i.get("IdentityName", "") for i in identities if i.get("IdentityType") == "DOMAIN"}
-
     cutoff = datetime.now(timezone.utc) - timedelta(days=_RECENT_DAYS)
 
+    # First pass: collect every recently-verified identity with its CreatedTimestamp.
+    # The burst count is the SAME for every finding emitted from a single account scan -
+    # it reflects the total recent activity in the SES inventory, which is the signature
+    # Wiz documented (attackers add multiple identities, not one). We must count first
+    # so that the count is correct on every emitted finding.
+    recent_entries: list[tuple[str, datetime]] = []
     for identity in identities:
         scanned += 1
         name = identity.get("IdentityName", "")
         if not name:
             continue
         if not identity.get("VerifiedForSendingStatus", False):
-            continue  # Pending/failed identities aren't usable for phishing
-
-        # Look up details for created timestamp
+            continue
         try:
             detail = ses.get_email_identity(EmailIdentity=name)
         except Exception:
             continue
         created_at = detail.get("CreatedTimestamp")
         if not isinstance(created_at, datetime):
-            # Some boto3 versions return raw datetime, others may return a string.
-            # If we can't parse, skip rather than over-flag.
             continue
         if created_at.tzinfo is None:
             created_at = created_at.replace(tzinfo=timezone.utc)
         if created_at < cutoff:
-            continue  # Not recent
+            continue
+        recent_entries.append((name, created_at))
 
-        is_email_no_match = False
-        if _is_email(name):
-            domain_part = name.rsplit("@", 1)[-1]
-            is_email_no_match = domain_part not in verified_domains
+    recent_burst_count = len(recent_entries)
+    if recent_burst_count == 0:
+        return scanned, []
 
+    for name, created_at in recent_entries:
         findings.append(
             _build_finding(
                 identity_name=name,
@@ -203,7 +214,7 @@ def _scan_region(provider: AWSProvider, region: str) -> tuple[int, list[Finding]
                 region=region,
                 created_at=created_at,
                 out_of_sandbox=out_of_sandbox,
-                is_email_no_matching_domain=is_email_no_match,
+                recent_burst_count=recent_burst_count,
             )
         )
 

@@ -1,4 +1,12 @@
-"""Tests for TF-001: SES phishing setup precursor detector."""
+"""Tests for TF-001: SES phishing setup precursor detector.
+
+v2.2.1: severity escalation rewritten. HIGH now requires BOTH out-of-sandbox
+AND a burst of >=2 recent verifications in the same account scan (matches
+Wiz's documented "multiple domains" pattern). The earlier "email identity
+without matching domain" signal was removed - it pointed at the wrong
+attacker behaviour (Wiz documented attackers adding domains, not single
+typosquats).
+"""
 
 from __future__ import annotations
 
@@ -49,6 +57,8 @@ def _identity(name: str, identity_type: str = "EMAIL_ADDRESS", verified: bool = 
 
 
 # -----------------------------------------------------------------------------
+# Detection tests
+# -----------------------------------------------------------------------------
 
 
 def test_no_identities_no_findings() -> None:
@@ -59,7 +69,7 @@ def test_no_identities_no_findings() -> None:
 
 
 def test_old_identity_not_flagged() -> None:
-    """Identity verified 60 days ago = not in attack-window, no flag."""
+    """Identity verified 60 days ago = outside the recent window, no flag."""
     name = "newsletter@company.example"
     ses = _ses_client(
         out_of_sandbox=True,
@@ -70,8 +80,24 @@ def test_old_identity_not_flagged() -> None:
     assert result.findings == []
 
 
-def test_recent_identity_in_sandbox_medium() -> None:
-    """Recent identity but account in sandbox = MEDIUM (limited blast radius)."""
+def test_single_recent_identity_out_of_sandbox_medium() -> None:
+    """One recent identity, even with production sending, is MEDIUM - not a burst yet."""
+    name = "team@trusted.example"
+    ses = _ses_client(
+        out_of_sandbox=True,
+        identities=[_identity(name)],
+        details={name: {"CreatedTimestamp": _now() - timedelta(days=2)}},
+    )
+    result = ses_phishing.detect(_provider(ses))
+    assert len(result.findings) == 1
+    f = result.findings[0]
+    assert f.severity == Severity.MEDIUM
+    assert f.category == Category.THREAT
+    assert f.threat_pattern_id == ses_phishing.PATTERN_ID
+
+
+def test_single_recent_identity_in_sandbox_medium() -> None:
+    """Single recent + sandbox = MEDIUM (limited blast radius)."""
     name = "test@dev.example"
     ses = _ses_client(
         out_of_sandbox=False,
@@ -82,47 +108,65 @@ def test_recent_identity_in_sandbox_medium() -> None:
     assert len(result.findings) == 1
     f = result.findings[0]
     assert f.severity == Severity.MEDIUM
-    assert f.category == Category.THREAT
-    assert f.threat_pattern_id == ses_phishing.PATTERN_ID
-    assert "test@dev.example" in f.title
     assert "sandbox" in f.description.lower()
 
 
-def test_recent_identity_out_of_sandbox_with_matching_domain_medium() -> None:
-    """Recent email identity + production sending + matching DOMAIN identity in account = MEDIUM."""
-    email = "alerts@trusted.example"
-    domain = "trusted.example"
+def test_burst_out_of_sandbox_escalates_to_high() -> None:
+    """TWO+ recent verifications + production sending = HIGH (Wiz burst pattern)."""
     ses = _ses_client(
         out_of_sandbox=True,
         identities=[
-            _identity(email, identity_type="EMAIL_ADDRESS"),
-            _identity(domain, identity_type="DOMAIN"),
+            _identity("domain1.example", identity_type="DOMAIN"),
+            _identity("domain2.example", identity_type="DOMAIN"),
         ],
         details={
-            email: {"CreatedTimestamp": _now() - timedelta(days=2)},
-            domain: {"CreatedTimestamp": _now() - timedelta(days=200)},  # old, won't be flagged
+            "domain1.example": {"CreatedTimestamp": _now() - timedelta(days=1)},
+            "domain2.example": {"CreatedTimestamp": _now() - timedelta(days=3)},
         },
     )
     result = ses_phishing.detect(_provider(ses))
-    # Only the recent email is flagged. Domain match -> MEDIUM (not HIGH).
-    flagged = [f for f in result.findings if f.severity != Severity.INFO]
-    assert len(flagged) == 1
-    assert flagged[0].severity == Severity.MEDIUM
+    assert len(result.findings) == 2
+    # BOTH findings escalate - the burst count is account-scoped, not per-finding
+    for f in result.findings:
+        assert f.severity == Severity.HIGH
+        assert "burst pattern" in f.description.lower()
+        assert "wiz" in f.description.lower()
 
 
-def test_recent_email_no_matching_domain_out_of_sandbox_high() -> None:
-    """Recent email + out-of-sandbox + NO matching domain = HIGH (typosquat pattern)."""
-    name = "support@typosquat.example"
+def test_burst_in_sandbox_stays_medium() -> None:
+    """Burst but account still in sandbox = MEDIUM (no external blast radius)."""
+    ses = _ses_client(
+        out_of_sandbox=False,
+        identities=[
+            _identity("d1.example", identity_type="DOMAIN"),
+            _identity("d2.example", identity_type="DOMAIN"),
+        ],
+        details={
+            "d1.example": {"CreatedTimestamp": _now() - timedelta(days=1)},
+            "d2.example": {"CreatedTimestamp": _now() - timedelta(days=2)},
+        },
+    )
+    result = ses_phishing.detect(_provider(ses))
+    assert len(result.findings) == 2
+    for f in result.findings:
+        assert f.severity == Severity.MEDIUM
+
+
+def test_email_no_matching_domain_does_not_escalate() -> None:
+    """v2.2.1 regression check: the removed 'typosquat' heuristic must not return.
+
+    Wiz documented attackers verifying DOMAINS in bursts, not single emails
+    without a matching domain. A single email identity, even out-of-sandbox,
+    must stay MEDIUM unless the burst threshold is met.
+    """
     ses = _ses_client(
         out_of_sandbox=True,
-        identities=[_identity(name)],
-        details={name: {"CreatedTimestamp": _now() - timedelta(days=1)}},
+        identities=[_identity("support@typosquat.example")],
+        details={"support@typosquat.example": {"CreatedTimestamp": _now() - timedelta(days=1)}},
     )
     result = ses_phishing.detect(_provider(ses))
     assert len(result.findings) == 1
-    f = result.findings[0]
-    assert f.severity == Severity.HIGH
-    assert "typosquat" in f.description.lower()
+    assert result.findings[0].severity == Severity.MEDIUM
 
 
 def test_pending_identity_not_flagged() -> None:
@@ -135,6 +179,30 @@ def test_pending_identity_not_flagged() -> None:
     )
     result = ses_phishing.detect(_provider(ses))
     assert result.findings == []
+
+
+def test_burst_only_counts_recent_identities() -> None:
+    """Old (>14d) identities do not contribute to the burst count.
+
+    Account has 1 recent identity and 1 old identity. Old one is filtered
+    out before the burst check, so burst_count = 1, severity stays MEDIUM
+    even out-of-sandbox.
+    """
+    ses = _ses_client(
+        out_of_sandbox=True,
+        identities=[
+            _identity("recent.example", identity_type="DOMAIN"),
+            _identity("old.example", identity_type="DOMAIN"),
+        ],
+        details={
+            "recent.example": {"CreatedTimestamp": _now() - timedelta(days=2)},
+            "old.example": {"CreatedTimestamp": _now() - timedelta(days=200)},
+        },
+    )
+    result = ses_phishing.detect(_provider(ses))
+    assert len(result.findings) == 1
+    assert "recent.example" in result.findings[0].resource_id
+    assert result.findings[0].severity == Severity.MEDIUM
 
 
 def test_remediation_includes_delete_and_audit() -> None:
@@ -174,11 +242,7 @@ def test_pattern_metadata_exposed() -> None:
 
 
 def test_provider_client_failure_swallowed_per_region() -> None:
-    """sesv2 client init failure in a region is swallowed (region opt-in is the common cause).
-
-    This differs from patterns where AWS perms errors should surface - SES is region-scoped
-    and many regions don't have sesv2 at all. We trade error visibility for noise reduction.
-    """
+    """sesv2 client init failure in a region is swallowed (region opt-in is the common cause)."""
     p = MagicMock(spec=AWSProvider)
     p.regions = ["us-east-1"]
     p.client.side_effect = RuntimeError("boom")
