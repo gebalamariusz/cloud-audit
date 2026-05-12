@@ -32,6 +32,7 @@ from cloud_audit.providers.aws.threat_feed import (
     lambda_function_url,
     mmdsv1_in_use,
     quarantine_policy,
+    whoami_confusion,
 )
 from cloud_audit.providers.base import make_check
 
@@ -50,6 +51,7 @@ _PATTERN_MODULES = [
     lambda_function_url,
     quarantine_policy,
     mmdsv1_in_use,
+    whoami_confusion,
     datazone_overgrant,
 ]
 """Registry of all threat feed pattern modules.
