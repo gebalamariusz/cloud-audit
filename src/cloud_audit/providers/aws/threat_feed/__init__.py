@@ -27,7 +27,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from cloud_audit.models import Category
-from cloud_audit.providers.aws.threat_feed import quarantine_policy
+from cloud_audit.providers.aws.threat_feed import lambda_function_url, quarantine_policy
 from cloud_audit.providers.base import make_check
 
 if TYPE_CHECKING:
@@ -42,6 +42,7 @@ to get reproducible scans across releases.
 """
 
 _PATTERN_MODULES = [
+    lambda_function_url,
     quarantine_policy,
 ]
 """Registry of all threat feed pattern modules.
