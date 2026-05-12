@@ -1,4 +1,4 @@
-"""TF-004: TruffleHog (and similar leaked-creds-discovery tools) user-agent in CloudTrail.
+"""TF-004: leaked-creds-discovery scanner user-agent in CloudTrail.
 
 When credentials leak to public sources (GitHub commits, paste sites,
 shipping logs), automated discovery tools immediately scrape and validate
@@ -6,19 +6,32 @@ them. The most common validation is `aws sts get-caller-identity` because
 it requires zero permissions to call but tells the attacker who the
 credentials belong to.
 
-TruffleHog (the most common scanner) leaves a recognisable user-agent
-signature when it makes that call. Other scanners (gitleaks, CloudGrappler,
-DetentionDodger validators) have similar signatures.
+TruffleHog, gitleaks, NoseyParker and similar OFFENSIVE leaked-credentials
+scanners *can* leave a recognisable user-agent substring when their HTTP
+clients are invoked with a custom UA (e.g. TruffleHog's `--user-agent-suffix`
+flag). TF-004 catches those cases.
 
-Seeing such a UA in CloudTrail = your credentials were validated by an
-external automated scanner = treat as confirmed exposure even before any
-exploitation event lands. We surface CRITICAL because the next step in the
-attack chain is typically CreateFunction / RunInstances / VerifyEmailIdentity
-within minutes.
+DETECTION LIMITATION (be honest with yourself): when these scanners use the
+stock AWS SDK / boto3 / aws-cli default user-agent, their calls look
+identical to legitimate traffic and TF-004 will NOT flag them. Absence of a
+hit does not mean nothing scanned your keys; presence of a hit is a strong
+signal that something did. Pair this with TF-003 (quarantine policy) and
+behavioural CloudTrail monitoring (e.g. Prowler's
+`cloudtrail_threat_detection_enumeration`) for fuller coverage.
+
+We deliberately exclude DEFENSIVE tools like Permiso's CloudGrappler and
+DetentionDodger from the signature list - those running against your account
+are your own (or your auditor's) and should not generate findings.
+
+Seeing such a UA in CloudTrail = your credentials were likely validated by
+an external offensive scanner = treat as confirmed exposure. We surface
+CRITICAL because the next step in the attack chain is typically
+CreateFunction / RunInstances / VerifyEmailIdentity within minutes.
 
 References:
-    - https://trufflesecurity.com/blog/the-mechanics-of-trufflehog-validation
+    - https://www.bleepingcomputer.com/news/security/researchers-report-amazon-ses-abused-in-phishing-to-evade-detection/
     - https://permiso.io/blog/introducing-detention-dodger
+    - https://github.com/trufflesecurity/trufflehog
     - https://github.com/Cybr-Inc/fwdcloudsec-2025-summaries
 """
 
@@ -40,17 +53,19 @@ PATTERN_SEVERITY = Severity.CRITICAL
 DOC_URL = "https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-record-contents.html"
 
 _REFERENCES = [
-    "https://trufflesecurity.com/blog/the-mechanics-of-trufflehog-validation",
+    "https://www.bleepingcomputer.com/news/security/researchers-report-amazon-ses-abused-in-phishing-to-evade-detection/",
     "https://permiso.io/blog/introducing-detention-dodger",
+    "https://github.com/trufflesecurity/trufflehog",
 ]
 
-# Substrings (case-insensitive) in CloudTrail userAgent that indicate a
-# known leaked-credentials discovery scanner. Easy to extend as new tools surface.
+# Substrings (case-insensitive) in CloudTrail userAgent that indicate an
+# OFFENSIVE leaked-credentials discovery scanner. DEFENSIVE tools
+# (CloudGrappler, DetentionDodger) are intentionally excluded - operators
+# running them against their own account are not the threat. Easy to extend
+# as new offensive tools surface; resist the urge to add defensive ones.
 _SCANNER_UA_SIGNATURES = (
     "trufflehog",
     "gitleaks",
-    "cloudgrappler",
-    "detention-dodger",
     "noseyparker",
     "secretscanner",
 )

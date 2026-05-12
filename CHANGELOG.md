@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-05-12
+
+### Changed
+
+- **TF-001 (SES phishing setup)** - severity escalation logic rewritten.
+  HIGH now requires BOTH out-of-sandbox AND a burst of >=2 recent
+  identity verifications in the same account scan. The previous
+  "email identity without matching domain" escalation has been removed:
+  it modeled the wrong attacker behaviour. Wiz's September 2025 research
+  documented attackers *"adding multiple domains as verified identities
+  using the CreateEmailIdentity API"* in quick succession - a burst
+  pattern, not a single typosquat email. The new logic matches what
+  the source incident actually documented.
+
+- **TF-004 (leaked-creds scanner UA)** - removed `cloudgrappler` and
+  `detention-dodger` from the user-agent signature list. Both are
+  Permiso DEFENSIVE tools - their UA appearing in CloudTrail means a
+  defender is running them against the account, not that the account
+  is under attack. The detector now only matches OFFENSIVE scanner
+  signatures (`trufflehog`, `gitleaks`, `noseyparker`, `secretscanner`).
+  Module docstring updated with an explicit detection caveat: scanners
+  using stock AWS SDK / boto3 / aws-cli default user-agents look
+  identical to legitimate traffic and will not trigger this pattern.
+
+- **TF-004 references** - replaced a fabricated TruffleHog blog URL in
+  the references list with the verified BleepingComputer / Kaspersky
+  May 2026 SES abuse coverage and the official TruffleHog GitHub repo.
+
+### Tests
+
+- 742 -> 747 (+5 net). New regression tests:
+  - `test_email_no_matching_domain_does_not_escalate` (TF-001) proves
+    the removed typosquat heuristic does not return.
+  - `test_burst_out_of_sandbox_escalates_to_high` and
+    `test_burst_in_sandbox_stays_medium` cover the new escalation rule.
+  - `test_burst_only_counts_recent_identities` verifies the burst
+    counter respects the 14-day window.
+  - `test_cloudgrappler_ua_not_flagged` and
+    `test_detention_dodger_ua_not_flagged` (TF-004) prove defensive
+    tools are now excluded.
+
 ## [2.2.0] - 2026-05-12
 
 ### Added
