@@ -100,8 +100,8 @@ cloud-audit blast-radius --resource arn:aws:iam::123456789012:role/deploy \
 Seven historical breach scenarios ship pre-loaded for context
 (Capital One 2019, Cryptomining 2025, AgentCore 2026, Snowflake UNC5537 2024,
 nx Supply Chain 2026, Codefinger SSE-C 2025, Trivy / TeamPCP 2026), each with
-verified primary-source citations. See [docs/features/blast-radius.md](docs/features/blast-radius.md)
-for expansion rules, the BlastRadiusGraph v1.0 schema, and risk-score heuristic.
+verified primary-source citations. See the [Blast Radius documentation](https://haitmg.pl/cloud-audit/features/blast-radius/)
+for expansion rules, the BlastRadiusGraph v1.0 schema, and the risk-score heuristic.
 
 ### Also new since v2.0
 
@@ -180,13 +180,13 @@ cloud-audit simulate --fix aws-vpc-002
 
 | Capability | What it does |
 |---|---|
-| **Blast Radius CLI** (v2.3) | `cloud-audit blast-radius --resource <id>` walks outward from any AWS resource and emits the reachable attack graph as tree, JSON ([BlastRadiusGraph v1.0](docs/features/blast-radius.md#output-json-blastradiusgraph-v10)), Mermaid, or Markdown. The JSON drops straight into the [live visualizer](https://blast-audit.haitmg.pl/) for interactive exploration. |
+| **Blast Radius CLI** (v2.3) | `cloud-audit blast-radius --resource <id>` walks outward from any AWS resource and emits the reachable attack graph as tree, JSON ([BlastRadiusGraph v1.0](https://haitmg.pl/cloud-audit/features/blast-radius/#output-json-blastradiusgraph-v10)), Mermaid, or Markdown. The JSON drops straight into the [live visualizer](https://blast-audit.haitmg.pl/) for interactive exploration. |
 | **Threat Feed v1** (v2.2) | 10 active-abuse detectors from real 2025-2026 incidents - cryptomining, leaked-cred scanners, MMDSv1, DataZone overgrant, Roles Anywhere, CloudTrail tampering. Each detector ships with primary-source citation. |
-| **IAM Privilege Escalation** (v2.1) | 64 escalation methods across 9 categories, including lateral movement detection via AssumeRole graph traversal. PMapper has been dead since 2022 - this is its open-source replacement, and it covers paths PMapper never did. |
+| **IAM Privilege Escalation** (v2.1) | 64 escalation methods across 9 categories, including lateral movement detection via AssumeRole graph traversal. PMapper has been unmaintained since v1.1.5 (Jan 2022); cloud-audit offers a CLI-native alternative that covers additional escalation patterns beyond PMapper's IAM-principal scope. |
 | **What-If Simulator** (v2.0) | `cloud-audit simulate --fix aws-vpc-002` shows score change, chains broken, and risk reduction before you apply anything. |
 | **Root Cause Grouping** (v2.0) | "Fix 4 things, break 22 chains." Groups findings by shared root cause and ranks by impact. |
 | **Security Posture Trend** (v2.0) | `cloud-audit trend` tracks health score, chains, and risk over time with sparkline visualization. |
-| **AI-SPM** (v2.0) | First open-source Bedrock + SageMaker scanner. 5 checks, 3 attack chains (model theft, LLMjacking, data poisoning). |
+| **AI-SPM** (v2.0) | Open-source Bedrock + SageMaker scanner. 5 checks, 3 attack chains (model theft, LLMjacking, data poisoning). |
 
 ---
 
@@ -260,14 +260,14 @@ claude mcp add cloud-audit -- uvx --from cloud-audit cloud-audit-mcp
 
 ## How It Compares
 
-[Prowler](https://github.com/prowler-cloud/prowler) is the AWS security standard: 572 checks across 83 services, 41 compliance frameworks (CIS, PCI-DSS, HIPAA, SOC2, NIST 800, ISO 27001, GDPR, FedRAMP, NIS2, MITRE ATT&CK and more), 55 auto-remediation fixers, and graph-based attack path analysis in the Prowler App (Cartography + Neo4j). It also covers Azure, GCP, Kubernetes, M365, and 10+ other providers.
+[Prowler](https://github.com/prowler-cloud/prowler) is the AWS security standard: 600 checks across 84 services, 44 compliance frameworks (CIS, PCI-DSS, HIPAA, SOC2, NIST 800, ISO 27001, GDPR, FedRAMP, NIS2, MITRE ATT&CK and more), auto-remediation fixers, and graph-based attack path analysis in the Prowler App (Cartography + Neo4j). It also covers Azure, GCP, Kubernetes, M365, and several other providers.
 
 cloud-audit is AWS-only and intentionally narrower (94 curated checks). It goes deep where Prowler goes wide: attack chain correlation and IAM escalation detection run in the free CLI with zero infrastructure, every finding ships with reviewable Terraform + AWS CLI remediation, and scan diff / drift tracking is built into the CLI.
 
 | Feature | Prowler | cloud-audit |
 |---------|---------|-------------|
-| AWS checks | 572 across 83 services | 94 across 23 services |
-| Compliance frameworks (AWS) | 41 (CIS, PCI-DSS, HIPAA, SOC2, NIST, ISO 27001, GDPR, FedRAMP, NIS2, ...) | 6 (CIS v3.0, SOC 2, BSI C5, ISO 27001, HIPAA, NIS2) |
+| AWS checks | 600 across 84 services | 94 across 23 services |
+| Compliance frameworks (AWS) | 44 (CIS, PCI-DSS, HIPAA, SOC2, NIST, ISO 27001, GDPR, FedRAMP, NIS2, ...) | 6 (CIS v3.0, SOC 2, BSI C5, ISO 27001, HIPAA, NIS2) |
 | Auto-remediation | 55 fixers across 17 AWS services (direct API calls) | 94/94 findings with CLI + Terraform output (reviewable, you apply) |
 | Attack path / graph analysis | Prowler App (Cartography + graph queries) | CLI-native (31 rules, no infra) |
 | IAM privilege escalation graph | Prowler App | CLI-native (61 methods + AssumeRole graph) |
@@ -281,11 +281,11 @@ cloud-audit is AWS-only and intentionally narrower (94 curated checks). It goes 
 
 Use Prowler for compliance breadth, multi-cloud coverage, and graph-based attack path analysis. Use cloud-audit for fast CLI-native attack chain detection, reviewable Terraform remediation, and CI/CD drift tracking. They are complementary, not competitors - a common setup is Prowler for quarterly compliance evidence plus cloud-audit daily in CI/CD.
 
-<sub>Prowler stats verified from github.com/prowler-cloud/prowler (April 2026). cloud-audit snapshot as of v2.3.0.</sub>
+<sub>Prowler stats verified from github.com/prowler-cloud/prowler on 2026-05-25. cloud-audit snapshot as of v2.3.0.</sub>
 
 ### Blast radius specifically
 
-Most existing AWS blast-radius tooling either lives behind paid SaaS, requires standing up Neo4j + Cartography, or has been unmaintained for years. `cloud-audit blast-radius` is the first pure-CLI open-source forward-BFS blast-radius tool with arbitrary AWS resource seeds and a stable JSON contract that downstream tools can consume.
+Most existing AWS blast-radius tooling either lives behind paid SaaS, requires standing up Neo4j + Cartography, or has been unmaintained for years. `cloud-audit blast-radius` aims to be a lightweight CLI-native alternative: arbitrary AWS resource seeds (EC2, IAM, Lambda, S3, secret), a documented JSON contract (BlastRadiusGraph v1.0) that downstream tools can consume, and no infrastructure to stand up.
 
 | Tool | Forward BFS from arbitrary AWS resource? | Pure CLI? | Last release |
 |---|---|---|---|

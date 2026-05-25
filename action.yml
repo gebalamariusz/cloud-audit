@@ -6,6 +6,10 @@ branding:
   color: blue
 
 inputs:
+  cloud-audit-version:
+    description: "Pin cloud-audit to a specific PyPI version (e.g. 2.3.0). Default matches the action's release tag for reproducible builds."
+    required: false
+    default: "2.3.0"
   format:
     description: "Output format: sarif, json, html, markdown"
     required: false
@@ -40,31 +44,54 @@ runs:
   steps:
     - name: Install cloud-audit
       shell: bash
-      run: pip install cloud-audit
+      env:
+        CLOUD_AUDIT_VERSION: ${{ inputs.cloud-audit-version }}
+      run: |
+        if [ -z "$CLOUD_AUDIT_VERSION" ]; then
+          echo "::error::cloud-audit-version input must not be empty"
+          exit 2
+        fi
+        # Reject anything outside [0-9A-Za-z.+-] to prevent injection via pip spec
+        case "$CLOUD_AUDIT_VERSION" in
+          *[!0-9A-Za-z.+\-]*)
+            echo "::error::Refusing to install cloud-audit==$CLOUD_AUDIT_VERSION - illegal characters in version"
+            exit 2
+            ;;
+        esac
+        pip install "cloud-audit==${CLOUD_AUDIT_VERSION}"
 
     - name: Run cloud-audit scan
       id: scan
       shell: bash
+      env:
+        INPUT_FORMAT: ${{ inputs.format }}
+        INPUT_OUTPUT: ${{ inputs.output }}
+        INPUT_REGIONS: ${{ inputs.regions }}
+        INPUT_REMEDIATION: ${{ inputs.remediation }}
+        INPUT_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+        INPUT_EXTRA_ARGS: ${{ inputs.extra-args }}
       run: |
         set +e
 
-        ARGS="--provider aws"
-        ARGS="$ARGS --format ${{ inputs.format }}"
-        ARGS="$ARGS --output ${{ inputs.output }}"
+        ARGS=(--provider aws --format "$INPUT_FORMAT" --output "$INPUT_OUTPUT")
 
-        if [ -n "${{ inputs.regions }}" ]; then
-          ARGS="$ARGS --regions ${{ inputs.regions }}"
+        if [ -n "$INPUT_REGIONS" ]; then
+          ARGS+=(--regions "$INPUT_REGIONS")
         fi
 
-        if [ "${{ inputs.remediation }}" = "true" ]; then
-          ARGS="$ARGS --remediation"
+        if [ "$INPUT_REMEDIATION" = "true" ]; then
+          ARGS+=(--remediation)
         fi
 
-        if [ -n "${{ inputs.extra-args }}" ]; then
-          ARGS="$ARGS ${{ inputs.extra-args }}"
+        # Word-split extra-args on whitespace into argv entries. The values stay in
+        # argv (not the shell), so a malicious workflow author can pass odd flags
+        # but cannot break out of the cloud-audit invocation.
+        if [ -n "$INPUT_EXTRA_ARGS" ]; then
+          read -r -a EXTRA <<< "$INPUT_EXTRA_ARGS"
+          ARGS+=("${EXTRA[@]}")
         fi
 
-        cloud-audit scan $ARGS
+        cloud-audit scan "${ARGS[@]}"
         EXIT_CODE=$?
 
         echo "exit-code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
@@ -77,7 +104,7 @@ runs:
 
         # Exit code 1 = findings detected
         if [ $EXIT_CODE -eq 1 ]; then
-          if [ "${{ inputs.fail-on-findings }}" != "true" ]; then
+          if [ "$INPUT_FAIL_ON_FINDINGS" != "true" ]; then
             echo "::warning::Security findings detected - see results for details"
             exit 0
           fi
@@ -90,21 +117,26 @@ runs:
       if: inputs.diff-baseline != ''
       id: diff
       shell: bash
+      env:
+        INPUT_FORMAT: ${{ inputs.format }}
+        INPUT_OUTPUT: ${{ inputs.output }}
+        INPUT_REGIONS: ${{ inputs.regions }}
+        INPUT_DIFF_BASELINE: ${{ inputs.diff-baseline }}
       run: |
         set +e
 
         # For diff, we need a JSON scan. Re-run if the primary format was not JSON.
-        CURRENT_JSON="${{ inputs.output }}"
-        if [ "${{ inputs.format }}" != "json" ]; then
+        CURRENT_JSON="$INPUT_OUTPUT"
+        if [ "$INPUT_FORMAT" != "json" ]; then
           CURRENT_JSON="current-scan.json"
-          DIFF_ARGS="--provider aws --format json --output $CURRENT_JSON"
-          if [ -n "${{ inputs.regions }}" ]; then
-            DIFF_ARGS="$DIFF_ARGS --regions ${{ inputs.regions }}"
+          DIFF_ARGS=(--provider aws --format json --output "$CURRENT_JSON")
+          if [ -n "$INPUT_REGIONS" ]; then
+            DIFF_ARGS+=(--regions "$INPUT_REGIONS")
           fi
-          cloud-audit scan $DIFF_ARGS || true
+          cloud-audit scan "${DIFF_ARGS[@]}" || true
         fi
 
-        cloud-audit diff "${{ inputs.diff-baseline }}" "$CURRENT_JSON"
+        cloud-audit diff "$INPUT_DIFF_BASELINE" "$CURRENT_JSON"
         EXIT_CODE=$?
 
         echo "diff-exit-code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
