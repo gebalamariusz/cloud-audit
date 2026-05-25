@@ -33,12 +33,20 @@
 <p align="center">
   <a href="https://haitmg.pl/cloud-audit/">Documentation</a> -
   <a href="https://haitmg.pl/cloud-audit/getting-started/quick-start/">Quick Start</a> -
-  <a href="https://haitmg.pl/cloud-audit/compliance/overview/">Compliance</a> -
+  <a href="https://haitmg.pl/cloud-audit/features/blast-radius/">Blast Radius</a> -
+  <a href="https://blast-audit.haitmg.pl/">Live Visualizer</a> -
   <a href="https://haitmg.pl/cloud-audit/features/attack-chains/">Attack Chains</a> -
   <a href="https://haitmg.pl/cloud-audit/features/iam-escalation/">IAM Escalation</a> -
   <a href="https://haitmg.pl/cloud-audit/features/threat-feed/">Threat Feed</a> -
-  <a href="https://haitmg.pl/cloud-audit/features/simulate/">Simulator</a> -
   <a href="https://haitmg.pl/cloud-audit/features/mcp-server/">MCP Server</a>
+</p>
+
+<p align="center">
+  <a href="https://blast-audit.haitmg.pl/demo/capital-one-2019/?board=1">
+    <img src="assets/blast-audit-boardroom.png" alt="blast-audit visualizer - executive briefing view of Snowflake 2024 breach: $28M exposure, 4 years to detect, fix = enforce MFA" width="820">
+  </a>
+  <br>
+  <sub>Drop a <code>cloud-audit blast-radius</code> JSON into the live visualizer at <a href="https://blast-audit.haitmg.pl/">blast-audit.haitmg.pl</a> - or click the screenshot to explore the Snowflake 2024 breach interactively.</sub>
 </p>
 
 ## Quick Start
@@ -54,30 +62,58 @@ Uses your default AWS credentials and region. Try without an AWS account:
 cloud-audit demo
 ```
 
-### NEW in v2.3: Blast Radius CLI
+### NEW in v2.3: Blast Radius CLI + live visualizer
 
-Walk outward from a single AWS resource and show what an attacker could reach
-if THAT resource were compromised. Pure offline analysis against a saved scan -
-zero AWS API calls at blast-radius time. Seed any EC2 instance, IAM role/user,
-Lambda function, S3 bucket, or Secrets Manager secret.
+> *Walk outward from any AWS resource and show exactly what an attacker reaches
+> if THAT resource is compromised.* The CLI runs offline against a saved scan
+> (zero AWS API calls at blast-radius time); the matching open visualizer at
+> [blast-audit.haitmg.pl](https://blast-audit.haitmg.pl/) renders the same JSON
+> as an interactive attack graph with break-point highlighting, MITRE ATT&CK
+> overlay, and an executive boardroom mode for CFO/CISO briefings.
+
+Seeds: EC2 short id (`i-XXX`), IAM role/user ARN, Lambda ARN, S3 bucket ARN,
+Secrets Manager secret ARN.
 
 ```bash
-# Quick view: tree of reachable identities + data + impact
-cloud-audit blast-radius --resource i-0abc123def456
+# 1. Run a scan once (saves to ~/.cloud-audit/last-scan.json)
+cloud-audit scan
 
-# JSON for the blast-audit visualizer (https://blast-audit.haitmg.pl)
+# 2. Inspect blast radius from any resource (uses the last scan automatically)
+cloud-audit blast-radius --resource i-0abc123def456              # tree (default)
+cloud-audit blast-radius --resource i-0abc123 --format mermaid   # for docs/slides
+cloud-audit blast-radius --resource i-0abc123 --format markdown  # for PR comments
+
+# 3. Export JSON and visualize it interactively
 cloud-audit blast-radius --resource arn:aws:iam::123456789012:role/deploy \
                         --format json --output blast.json
-
-# Mermaid diagram for docs / slides
-cloud-audit blast-radius --resource i-0abc123 --format mermaid
-
-# Markdown summary for PR comments
-cloud-audit blast-radius --resource i-0abc123 --format markdown
+# → open https://blast-audit.haitmg.pl/demo/upload/ → drop blast.json
 ```
 
-See [docs/features/blast-radius.md](docs/features/blast-radius.md) for the
-expansion rules, JSON schema (BlastRadiusGraph v1.0), and risk score heuristic.
+<p align="center">
+  <img src="assets/blast-audit-counterfactual.png" alt="Counterfactual view: applying the IAM fix collapses Capital One exposure from $270M to $0" width="820">
+  <br>
+  <sub>The visualizer's boardroom mode includes a one-click counterfactual -
+  <em>"What stops this attack?"</em> - that animates the exposure tile to
+  $0 when you preview the recommended IAM remediation.</sub>
+</p>
+
+Seven historical breach scenarios ship pre-loaded for context
+(Capital One 2019, Cryptomining 2025, AgentCore 2026, Snowflake UNC5537 2024,
+nx Supply Chain 2026, Codefinger SSE-C 2025, Trivy / TeamPCP 2026), each with
+verified primary-source citations. See [docs/features/blast-radius.md](docs/features/blast-radius.md)
+for expansion rules, the BlastRadiusGraph v1.0 schema, and risk-score heuristic.
+
+### Also new since v2.0
+
+| Version | Highlight |
+|---|---|
+| **v2.3.0** (May 2026) | **Blast Radius CLI** + live visualizer + 15 security-hardening fixes (Mermaid XSS escape, ID collision, BFS bounds, symlink-safe writes, URL scheme allow-list). 812 tests. |
+| v2.2.1 (May 2026) | TF-001 SES phishing burst escalation + TF-004 defensive-tool exclusion. |
+| v2.2.0 (May 2026) | **Threat Feed v1** - 10 active-abuse detectors from 2025-2026 incidents (cryptomining, leaked-cred scanners, MMDSv1, DataZone, Roles Anywhere, CloudTrail tampering). External research refs on every finding. |
+| v2.1.0 (Apr 2026) | 64 IAM escalation methods, full pathfinding.cloud coverage. |
+| v2.0.0 (Apr 2026) | IAM Escalation graph, What-If simulator, Trend tracking, AI-SPM (Bedrock + SageMaker). |
+
+Detail per release in [CHANGELOG.md](CHANGELOG.md).
 
 ### NEW in v2.2: Threat Feed
 
@@ -140,15 +176,17 @@ cloud-audit simulate --fix aws-vpc-002
 
 ---
 
-## What's New in 2.0
+## Feature matrix
 
-| Feature | What it does |
+| Capability | What it does |
 |---|---|
-| **IAM Privilege Escalation** | 61 escalation methods across 9 categories, including lateral movement detection via AssumeRole graph traversal. PMapper has been dead since 2022 -- this is its open-source replacement, and it covers paths PMapper never did. |
-| **What-If Simulator** | `cloud-audit simulate --fix aws-vpc-002` shows score change, chains broken, and risk reduction before you apply anything. |
-| **Root Cause Grouping** | "Fix 4 things, break 22 chains." Groups findings by shared root cause and ranks by impact. |
-| **Security Posture Trend** | `cloud-audit trend` tracks health score, chains, and risk over time with sparkline visualization. |
-| **AI-SPM** | First open-source Bedrock + SageMaker scanner. 5 checks, 3 attack chains (model theft, LLMjacking, data poisoning). |
+| **Blast Radius CLI** (v2.3) | `cloud-audit blast-radius --resource <id>` walks outward from any AWS resource and emits the reachable attack graph as tree, JSON ([BlastRadiusGraph v1.0](docs/features/blast-radius.md#output-json-blastradiusgraph-v10)), Mermaid, or Markdown. The JSON drops straight into the [live visualizer](https://blast-audit.haitmg.pl/) for interactive exploration. |
+| **Threat Feed v1** (v2.2) | 10 active-abuse detectors from real 2025-2026 incidents - cryptomining, leaked-cred scanners, MMDSv1, DataZone overgrant, Roles Anywhere, CloudTrail tampering. Each detector ships with primary-source citation. |
+| **IAM Privilege Escalation** (v2.1) | 64 escalation methods across 9 categories, including lateral movement detection via AssumeRole graph traversal. PMapper has been dead since 2022 - this is its open-source replacement, and it covers paths PMapper never did. |
+| **What-If Simulator** (v2.0) | `cloud-audit simulate --fix aws-vpc-002` shows score change, chains broken, and risk reduction before you apply anything. |
+| **Root Cause Grouping** (v2.0) | "Fix 4 things, break 22 chains." Groups findings by shared root cause and ranks by impact. |
+| **Security Posture Trend** (v2.0) | `cloud-audit trend` tracks health score, chains, and risk over time with sparkline visualization. |
+| **AI-SPM** (v2.0) | First open-source Bedrock + SageMaker scanner. 5 checks, 3 attack chains (model theft, LLMjacking, data poisoning). |
 
 ---
 
@@ -243,7 +281,30 @@ cloud-audit is AWS-only and intentionally narrower (94 curated checks). It goes 
 
 Use Prowler for compliance breadth, multi-cloud coverage, and graph-based attack path analysis. Use cloud-audit for fast CLI-native attack chain detection, reviewable Terraform remediation, and CI/CD drift tracking. They are complementary, not competitors - a common setup is Prowler for quarterly compliance evidence plus cloud-audit daily in CI/CD.
 
-<sub>Prowler stats verified from github.com/prowler-cloud/prowler (April 2026). cloud-audit snapshot as of v2.0.1.</sub>
+<sub>Prowler stats verified from github.com/prowler-cloud/prowler (April 2026). cloud-audit snapshot as of v2.3.0.</sub>
+
+### Blast radius specifically
+
+Most existing AWS blast-radius tooling either lives behind paid SaaS, requires standing up Neo4j + Cartography, or has been unmaintained for years. `cloud-audit blast-radius` is the first pure-CLI open-source forward-BFS blast-radius tool with arbitrary AWS resource seeds and a stable JSON contract that downstream tools can consume.
+
+| Tool | Forward BFS from arbitrary AWS resource? | Pure CLI? | Last release |
+|---|---|---|---|
+| Wiz / Stream Security CloudTwin | yes | no (paid SaaS) | active |
+| Prowler App | yes | no (needs Neo4j + Cartography) | active |
+| Prowler CLI | no | yes | active |
+| PMapper | IAM-only, optimised for privesc-to-admin | yes | v1.1.5, Jan 2022 (unmaintained) |
+| Cloudsplaining | no (IAM policy analysis only) | yes | v0.8.2, Oct 2024 |
+| CloudFox | no for AWS (`lateral-movement` GCP only) | yes | active |
+| DetentionDodger | IAM-only, only post-quarantine users | yes | v1.0, Oct 2024 |
+| awspx | partial (graph + web UI) | Docker | v1.3.4, Aug 2021 (unmaintained) |
+| ScoutSuite | no | yes | v5.14.0, May 2024 |
+| Cartography | no built-in (bring your own Cypher) | no (graph ingestor) | active |
+| BloodHound CE | no for AWS (AD + Azure scope) | no (web app) | active |
+| pathfinding.cloud | no (it's a catalog) | n/a | n/a |
+| Trivy | no | yes | active |
+| **cloud-audit blast-radius** | **yes** | **yes** | **v2.3.0, May 2026** |
+
+The companion visualizer at [blast-audit.haitmg.pl](https://blast-audit.haitmg.pl/) consumes the same JSON without an account, install, or upload-to-cloud step. Everything stays in your browser.
 
 ---
 
@@ -363,17 +424,44 @@ cloud-audit never modifies your infrastructure. The `simulate` command runs loca
 Full docs at **[haitmg.pl/cloud-audit](https://haitmg.pl/cloud-audit/)**:
 
 - **[Getting Started](https://haitmg.pl/cloud-audit/getting-started/installation/)** - installation, quick start, demo mode
+- **[Blast Radius](https://haitmg.pl/cloud-audit/features/blast-radius/)** - forward BFS from arbitrary AWS resource, JSON schema, visualizer integration
 - **[Attack Chains](https://haitmg.pl/cloud-audit/features/attack-chains/)** - all 31 rules with MITRE ATT&CK references
-- **[IAM Escalation](https://haitmg.pl/cloud-audit/features/iam-escalation/)** - 61 methods, 9 categories (action-based + lateral AssumeRole graph)
+- **[IAM Escalation](https://haitmg.pl/cloud-audit/features/iam-escalation/)** - 64 methods, 9 categories (action-based + lateral AssumeRole graph)
+- **[Threat Feed](https://haitmg.pl/cloud-audit/features/threat-feed/)** - 10 active-abuse detectors from 2025-2026 incidents
 - **[What-If Simulator](https://haitmg.pl/cloud-audit/features/simulate/)** - simulate remediation impact
 - **[Compliance](https://haitmg.pl/cloud-audit/compliance/overview/)** - 6 frameworks: CIS, SOC 2, BSI C5, ISO 27001, HIPAA, NIS2
 - **[All 94 Checks](https://haitmg.pl/cloud-audit/checks/)** - full check reference by service
+
+## Companion visualizer
+
+The same BlastRadiusGraph v1.0 JSON that `cloud-audit blast-radius --format json` emits also drives the live visualizer at **[blast-audit.haitmg.pl](https://blast-audit.haitmg.pl/)** - no install, no signup, no upload to a third-party cloud (everything runs in your browser).
+
+<p align="center">
+  <a href="https://blast-audit.haitmg.pl/demo/capital-one-2019/">
+    <img src="assets/blast-audit-hero.png" alt="blast-audit operator view of the Capital One 2019 attack chain with the break-point IAM role highlighted" width="820">
+  </a>
+</p>
+
+Seven historical breach scenarios are pre-loaded with primary-source citations:
+
+| Scenario | Year | One-line pitch | URL |
+|---|---|---|---|
+| Capital One | 2019 | SSRF → IMDSv1 → admin S3 (100M records, $190M total damage) | [/demo/capital-one-2019/](https://blast-audit.haitmg.pl/demo/capital-one-2019/) |
+| Cryptomining | 2025 | Leaked AKID → 14 ASGs spinning in 10 minutes | [/demo/cryptomining-2025/](https://blast-audit.haitmg.pl/demo/cryptomining-2025/) |
+| Bedrock AgentCore | 2026 | Sandbox bypass via DNS resolver (AWS classed "won't fix") | [/demo/agentcore-2026/](https://blast-audit.haitmg.pl/demo/agentcore-2026/) |
+| Snowflake / UNC5537 | 2024 | Infostealer-harvested credentials replayed against no-MFA tenants (165 orgs, $28M+ AT&T settlement) | [/demo/snowflake-unc5537-2024/](https://blast-audit.haitmg.pl/demo/snowflake-unc5537-2024/) |
+| nx Supply Chain / UNC6426 | 2026 | Trojanised npm → LLM stealer → GitHub OIDC → AWS Admin in &lt;72 h | [/demo/unc6426-nx-2026/](https://blast-audit.haitmg.pl/demo/unc6426-nx-2026/) |
+| Codefinger | 2025 | AWS-native SSE-C ransomware (no key recovery from CloudTrail) | [/demo/codefinger-ssec-2025/](https://blast-audit.haitmg.pl/demo/codefinger-ssec-2025/) |
+| Trivy / TeamPCP | 2026 | 76 of 77 GitHub Action tags force-pushed to a credential stealer | [/demo/trivy-teampcp-2026/](https://blast-audit.haitmg.pl/demo/trivy-teampcp-2026/) |
+
+Boardroom mode (`?board=1` on any scenario) renders the same graph as a CFO/CISO briefing with the dollar exposure, time-to-detect, and recommended fix surfaced as 3 big tiles - click *"What stops this attack?"* and the exposure tile animates to $0.
 
 ## What's Next
 
 - Multi-account scanning (AWS Organizations)
 - SCP + permission boundary evaluation in IAM escalation
 - Terraform drift detection
+- Security Graph v3.0.0 (network reachability, cross-account propagation, permission-boundary semantics)
 
 Past releases: [CHANGELOG.md](CHANGELOG.md)
 
@@ -384,7 +472,7 @@ git clone https://github.com/gebalamariusz/cloud-audit.git
 cd cloud-audit
 pip install -e ".[dev]"
 
-pytest -v                          # 496 tests
+pytest -v                          # 812 tests
 ruff check src/ tests/             # lint
 mypy src/                          # type check
 ```
