@@ -867,8 +867,9 @@
       <div class="finding-cost" style="margin: 8px 0; padding: 8px 12px; background: rgba(239,68,68,0.06); border-radius: 6px; font-size: 13px;">
         <strong style="color: var(--red);">Risk: {{ finding.cost_estimate.display }}</strong>
         <span style="color: var(--text-dim);"> - {{ finding.cost_estimate.rationale }}</span>
-        {% if finding.cost_estimate.source_url %}
-        <a href="{{ finding.cost_estimate.source_url }}" target="_blank" rel="noopener" style="color: var(--teal); margin-left: 4px; text-decoration: none;">[source]</a>
+        {% set safe_source = finding.cost_estimate.source_url | safe_url %}
+        {% if safe_source %}
+        <a href="{{ safe_source }}" target="_blank" rel="noopener noreferrer" style="color: var(--teal); margin-left: 4px; text-decoration: none;">[source]</a>
         {% endif %}
       </div>
       {% endif %}
@@ -882,7 +883,10 @@
           <div class="code-block"><button class="copy-btn" onclick="copyCode(this)" aria-label="Copy code to clipboard">Copy</button>{{ finding.remediation.cli }}</div>
           <div class="remediation-label">Terraform</div>
           <div class="code-block"><button class="copy-btn" onclick="copyCode(this)" aria-label="Copy code to clipboard">Copy</button>{{ finding.remediation.terraform }}</div>
-          <div class="remediation-doc"><a href="{{ finding.remediation.doc_url }}" target="_blank" rel="noopener">AWS Documentation &rarr;</a></div>
+          {% set safe_doc = finding.remediation.doc_url | safe_url %}
+          {% if safe_doc %}
+          <div class="remediation-doc"><a href="{{ safe_doc }}" target="_blank" rel="noopener noreferrer">AWS Documentation &rarr;</a></div>
+          {% endif %}
         </div>
       </details>
       {% endif %}

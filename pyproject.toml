@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cloud-audit"
-version = "2.2.1"
-description = "Open-source AWS security scanner. Threat Feed v1 (10 active-abuse patterns from 2025-2026 incidents), 64 IAM escalation methods, What-If simulator, security trends, AI-SPM (Bedrock/SageMaker), 6 compliance frameworks, 31 attack chain rules, breach cost estimation, and MCP server. Every finding includes CLI + Terraform remediation."
+version = "2.3.0"
+description = "Open-source AWS security scanner. Blast Radius CLI (forward BFS from arbitrary resource), Threat Feed v1 (10 active-abuse patterns from 2025-2026 incidents), 64 IAM escalation methods, What-If simulator, security trends, AI-SPM (Bedrock/SageMaker), 6 compliance frameworks, 31 attack chain rules, breach cost estimation, and MCP server. Every finding includes CLI + Terraform remediation."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
@@ -81,6 +81,11 @@ select = ["E", "F", "I", "N", "W", "UP", "S", "B", "A", "C4", "SIM", "TCH", "RUF
 "src/cloud_audit/reports/compliance_markdown.py" = ["E501"]
 "src/cloud_audit/cli.py" = ["TC003"]
 "src/cloud_audit/mcp_server.py" = ["TC003"]
+# Blast radius uses camelCase field names to match the BlastRadiusGraph v1.0
+# wire-format contract shared with cloud-audit-demo (TypeScript types).
+# Renaming would break the JSON output schema consumers depend on.
+"src/cloud_audit/blast_radius.py" = ["N815"]
+"tests/test_blast_radius.py" = ["S101", "N803", "N806", "N815"]
 # Threat-feed modules and tests intentionally use boto3-style CamelCase
 # kwargs (UserName, RoleName, FunctionName, EmailIdentity) to match the
 # AWS API surface they wrap. N803 (lower_snake_case argument) is wrong here.

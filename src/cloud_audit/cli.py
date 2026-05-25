@@ -27,6 +27,27 @@ app = typer.Typer(
 )
 console = Console()
 
+
+def _safe_write_text(path: Path, content: str, *, encoding: str = "utf-8") -> None:
+    """Write text to ``path`` without following pre-existing symlinks.
+
+    Defense against a TOCTOU symlink attack in shared CI runners or multi-user
+    workstations: a hostile collaborator could place ``report.json`` as a
+    symlink to ``~/.aws/credentials`` or ``/etc/shadow`` before the user runs
+    cloud-audit, then the bare ``path.write_text(...)`` happily follows it and
+    clobbers the target. Refusing to write through a symlink closes that path.
+
+    The check is best-effort (an attacker who can replace the file between
+    the ``is_symlink`` test and the open is still possible in theory), but
+    that race is much harder to win than the static pre-placement case.
+    """
+    if path.is_symlink():
+        raise typer.BadParameter(
+            f"Refusing to write to {path}: target is a symbolic link. Remove or move the symlink and re-run."
+        )
+    path.write_text(content, encoding=encoding)
+
+
 SEVERITY_COLORS = {
     Severity.CRITICAL: "bold red",
     Severity.HIGH: "red",
@@ -410,7 +431,7 @@ def _export_fixes(findings: list[Finding], output_path: Path) -> None:
 
     import contextlib
 
-    output_path.write_text("\n".join(lines), encoding="utf-8")
+    _safe_write_text(output_path, "\n".join(lines))
     with contextlib.suppress(OSError):
         output_path.chmod(0o700)
     console.print(f"\n[green]Remediation script saved to {output_path}[/green]")
@@ -668,7 +689,7 @@ def _handle_format(
         raise typer.Exit(2)
 
     if output:
-        output.write_text(content, encoding="utf-8")
+        _safe_write_text(output, content)
         if not quiet:
             console.print(f"[green]{fmt.upper()} report saved to {output}[/green]")
     else:
@@ -1076,7 +1097,7 @@ def diff(
     if fmt == "json":
         content = result.model_dump_json(indent=2)
         if output:
-            output.write_text(content, encoding="utf-8")
+            _safe_write_text(output, content)
             if not quiet:
                 console.print(f"[green]JSON diff saved to {output}[/green]")
         else:
@@ -1087,7 +1108,7 @@ def diff(
 
         content = generate_diff_markdown(result)
         if output:
-            output.write_text(content, encoding="utf-8")
+            _safe_write_text(output, content)
             if not quiet:
                 console.print(f"[green]Markdown diff saved to {output}[/green]")
         else:
@@ -1182,7 +1203,7 @@ def _auto_save_report(report: ScanReport) -> None:
     try:
         _HISTORY_DIR.mkdir(parents=True, exist_ok=True)
         last_scan = _HISTORY_DIR / "last-scan.json"
-        last_scan.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+        _safe_write_text(last_scan, report.model_dump_json(indent=2))
     except Exception:  # noqa: S110 — persistence is best-effort
         pass
     # Also save to timestamped history for trend analysis
@@ -1585,6 +1606,363 @@ def threat_feed_cmd(
     # Exit 1 when CRITICAL/HIGH detected (CI gate)
     blocking = [f for f in all_findings if f.severity in (Severity.CRITICAL, Severity.HIGH)]
     raise typer.Exit(1 if blocking else 0)
+
+
+@app.command()
+def exposure(
+    report_file: Annotated[
+        Path | None,
+        typer.Option("--report", "-r", help="Path to JSON scan report (defaults to last scan in ~/.cloud-audit/)"),
+    ] = None,
+    limit: Annotated[
+        int,
+        typer.Option("--limit", "-n", help="Show top-N resources (default 20)"),
+    ] = 20,
+    output_format: Annotated[
+        str,
+        typer.Option("--format", "-f", help="Output: table (default) or json"),
+    ] = "table",
+    output_path: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Write to file (only for --format json)"),
+    ] = None,
+) -> None:
+    """Rank resources by effective exposure score from the Security Graph.
+
+    Combines network reachability (internet -> resource), privilege level
+    (admin?), and high-value classification (data, identity) into a single
+    0-100 number per resource. Useful as the "what should I fix first?" view.
+    """
+    from cloud_audit.graph import SecurityGraph
+
+    if report_file:
+        if not report_file.exists():
+            console.print(f"[red]Report file not found: {report_file}[/red]")
+            raise typer.Exit(2)
+        try:
+            report = ScanReport.model_validate_json(report_file.read_text(encoding="utf-8"))
+        except Exception as e:
+            console.print(f"[red]Failed to parse report: {e}[/red]")
+            raise typer.Exit(2) from None
+    else:
+        loaded = _load_last_report()
+        if loaded is None:
+            console.print("[red]No saved scan found. Run 'cloud-audit scan' first, or use --report PATH.[/red]")
+            raise typer.Exit(2)
+        report = loaded
+
+    if report.security_graph is None:
+        console.print("[yellow]This scan has no Security Graph (run a fresh scan with v3.0.0+ to populate).[/yellow]")
+        raise typer.Exit(2)
+
+    graph = SecurityGraph.from_dict(report.security_graph)
+    top = graph.top_exposed(limit=limit)
+
+    fmt = output_format.lower().strip()
+    if fmt == "json":
+        import json as _json
+
+        payload = _json.dumps(
+            {
+                "schema_version": "1",
+                "items": [
+                    {
+                        "id": n.id,
+                        "type": n.type,
+                        "label": n.label,
+                        "score": score,
+                        "attrs": n.attrs,
+                    }
+                    for n, score in top
+                ],
+            },
+            indent=2,
+        )
+        if output_path:
+            try:
+                _safe_write_text(output_path, payload)
+            except OSError as e:
+                console.print(f"[red]Failed to write {output_path}: {e}[/red]")
+                raise typer.Exit(2) from None
+            console.print(f"[green]Wrote exposure ranking to {output_path}[/green]")
+        else:
+            console.print(payload)
+        return
+
+    if fmt != "table":
+        console.print(f"[red]Unknown format: {output_format}. Use table or json.[/red]")
+        raise typer.Exit(2)
+
+    console.print()
+    console.print(
+        Panel(
+            f"Security Graph: [bold]{graph.node_count()}[/bold] nodes, "
+            f"[bold]{graph.edge_count()}[/bold] edges. Top [bold]{len(top)}[/bold] by exposure.",
+            title="[bold]Exposure ranking[/bold]",
+            border_style="cyan",
+            width=80,
+        )
+    )
+
+    table = Table(show_header=True, box=None, padding=(0, 2), header_style="bold")
+    table.add_column("Score", justify="right", width=6)
+    table.add_column("Type", width=14)
+    table.add_column("Label", width=40)
+    table.add_column("Why", style="dim")
+
+    for node, score in top:
+        score_color = "red" if score >= 70 else "yellow" if score >= 40 else "dim"
+        reasons: list[str] = []
+        if graph.paths_from_internet(node.id, max_hops=6) is not None:
+            reasons.append("internet-reachable")
+        if node.attrs.get("is_admin") is True:
+            reasons.append("admin")
+        if node.attrs.get("has_escalation") is True:
+            reasons.append("escalation")
+        if node.type in ("s3_bucket", "secret", "kms_key", "rds_instance"):
+            reasons.append("high-value data")
+        table.add_row(
+            f"[{score_color}]{score}[/{score_color}]",
+            node.type,
+            rich_escape(node.label[:38] + ("..." if len(node.label) > 38 else "")),
+            ", ".join(reasons) or "linked to others",
+        )
+
+    console.print(table)
+    console.print()
+
+
+@app.command(name="blast-radius")
+def blast_radius_cmd(
+    resource: Annotated[
+        str,
+        typer.Option(
+            "--resource",
+            "-r",
+            help="Seed resource: EC2 id (i-XXX), IAM role/user ARN, Lambda ARN, S3 bucket ARN, or secret ARN",
+        ),
+    ],
+    report_file: Annotated[
+        Path | None,
+        typer.Option(
+            "--report",
+            help="Path to JSON scan report (defaults to last scan in ~/.cloud-audit/)",
+        ),
+    ] = None,
+    output_format: Annotated[
+        str,
+        typer.Option(
+            "--format",
+            "-f",
+            help="Output format: tree (default), json, mermaid, markdown",
+        ),
+    ] = "tree",
+    output_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--output",
+            "-o",
+            help="Write output to file instead of stdout",
+        ),
+    ] = None,
+    max_depth: Annotated[
+        int,
+        typer.Option("--max-depth", help="Maximum BFS depth (default: 5)"),
+    ] = 5,
+    max_nodes: Annotated[
+        int,
+        typer.Option("--max-nodes", help="Maximum total nodes in result (default: 50)"),
+    ] = 50,
+) -> None:
+    """Compute blast radius for a single AWS resource.
+
+    Starts from the given resource and walks outward through scan data
+    (IAM, AssumeRole graph, attack chains) to show what an attacker
+    could reach if THIS resource were compromised. Pure in-memory
+    analysis against the saved scan - no AWS API calls.
+    """
+    from cloud_audit.blast_radius import (
+        compute_blast_radius,
+        to_json_str,
+        to_mermaid,
+        to_tree,
+    )
+
+    # Load report
+    if report_file:
+        if not report_file.exists():
+            console.print(f"[red]Report file not found: {report_file}[/red]")
+            raise typer.Exit(2)
+        try:
+            report = ScanReport.model_validate_json(report_file.read_text(encoding="utf-8"))
+        except Exception as e:
+            console.print(f"[red]Failed to parse report: {e}[/red]")
+            raise typer.Exit(2) from None
+    else:
+        loaded = _load_last_report()
+        if loaded is None:
+            console.print("[red]No saved scan found. Run 'cloud-audit scan' first, or use --report PATH.[/red]")
+            raise typer.Exit(2)
+        report = loaded
+
+    max_depth_cap = 25
+    max_nodes_cap = 10_000
+    if max_depth < 1 or max_nodes < 1:
+        console.print("[red]--max-depth and --max-nodes must be >= 1.[/red]")
+        raise typer.Exit(2)
+    if max_depth > max_depth_cap:
+        console.print(f"[yellow]--max-depth capped at {max_depth_cap} (requested {max_depth}).[/yellow]")
+        max_depth = max_depth_cap
+    if max_nodes > max_nodes_cap:
+        console.print(f"[yellow]--max-nodes capped at {max_nodes_cap} (requested {max_nodes}).[/yellow]")
+        max_nodes = max_nodes_cap
+
+    fmt = output_format.lower().strip()
+    if fmt not in {"tree", "json", "mermaid", "markdown"}:
+        console.print(f"[red]Unknown format: {output_format}. Use tree, json, mermaid, or markdown.[/red]")
+        raise typer.Exit(2)
+
+    # Tree output is ANSI-decorated text and cannot be meaningfully written to
+    # a file. Refuse instead of silently writing a different format under the
+    # user's nose (CWE-684).
+    if fmt == "tree" and output_path is not None:
+        console.print(
+            "[red]--output is not supported with --format tree (ANSI-decorated). "
+            "Use --format json, mermaid, or markdown together with --output.[/red]"
+        )
+        raise typer.Exit(2)
+
+    result = compute_blast_radius(report, resource, max_depth=max_depth, max_nodes=max_nodes)
+
+    def _write_or_exit(path: Path, payload: str, label: str) -> None:
+        """Write ``payload`` to ``path`` or fail with a typed CLI error.
+
+        Wrapping the write surfaces OSError (read-only filesystem, permission
+        denied, no such directory) as a clean exit-2 instead of leaking a
+        Python traceback to stderr.
+        """
+        try:
+            _safe_write_text(path, payload)
+        except OSError as exc:
+            console.print(f"[red]Failed to write {label} to {path}: {exc}[/red]")
+            raise typer.Exit(2) from None
+        console.print(f"[green]Wrote {label} to {path}[/green]")
+
+    if fmt == "json":
+        payload = to_json_str(result)
+        if output_path:
+            _write_or_exit(output_path, payload, "blast radius JSON")
+        else:
+            console.print(payload)
+        return
+
+    if fmt == "mermaid":
+        diagram = to_mermaid(result)
+        if output_path:
+            _write_or_exit(output_path, diagram, "Mermaid diagram")
+        else:
+            console.print(diagram)
+        return
+
+    if fmt == "markdown":
+        md = _blast_radius_to_markdown(result)
+        if output_path:
+            _write_or_exit(output_path, md, "Markdown report")
+        else:
+            console.print(md)
+        return
+
+    # Default: tree. rich_escape() everything sourced from the resource arg or
+    # the scan payload to prevent rich-markup injection in the terminal output.
+    console.print()
+    console.print(
+        Panel(
+            f"[bold]{rich_escape(result.summary.headline)}[/bold]\n"
+            f"Resource: [cyan]{rich_escape(resource)}[/cyan]\n"
+            f"Reachable: [yellow]{result.summary.nodes_reachable}[/yellow] "
+            f"| Paths to impact: [red]{result.summary.paths_found}[/red] "
+            f"| Risk score: [bold]{result.summary.risk_score}/100[/bold]",
+            title="[bold]Blast Radius[/bold]",
+            border_style="red" if (result.summary.paths_found or 0) > 0 else "yellow",
+            width=92,
+        )
+    )
+    console.print()
+    console.print(to_tree(result))
+
+    if result.fixes:
+        console.print()
+        console.print("[bold]Available fixes (from scan findings):[/bold]")
+        for fix in result.fixes:
+            marker = "[bold red]breaks chain[/bold red]" if fix.breaks_chain else "mitigates"
+            console.print(
+                f"  - [cyan]{rich_escape(fix.id)}[/cyan] {rich_escape(fix.title)} ({marker}, effort={fix.effort})"
+            )
+
+
+def _md_escape(text: object) -> str:
+    """Escape markdown control characters in user-controlled strings.
+
+    The markdown formatter renders scan-derived labels, sub-titles, edge
+    descriptions and fix titles into a document that's typically posted to a
+    GitHub PR or shared with customers. Without escaping, a resource label
+    containing `[click](javascript:...)` or stray `*` / backticks injects
+    links/emphasis into the rendered output.
+    """
+    s = "" if text is None else str(text)
+    return (
+        s.replace("\\", "\\\\")
+        .replace("`", "\\`")
+        .replace("*", "\\*")
+        .replace("_", "\\_")
+        .replace("[", "\\[")
+        .replace("]", "\\]")
+        .replace("(", "\\(")
+        .replace(")", "\\)")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
+
+def _blast_radius_to_markdown(result: object) -> str:
+    """Render a BlastRadiusResult as a compact Markdown summary."""
+    from cloud_audit.blast_radius import BlastRadiusResult
+
+    if not isinstance(result, BlastRadiusResult):
+        return ""
+
+    lines = [
+        f"# Blast Radius - {_md_escape(result.source.resource_id or 'resource')}",
+        "",
+        f"**Headline:** {_md_escape(result.summary.headline)}",
+        f"**Risk score:** {result.summary.risk_score}/100",
+        f"**Reachable nodes:** {result.summary.nodes_reachable}",
+        f"**Paths to impact:** {result.summary.paths_found}",
+        "",
+        "## Graph",
+        "",
+    ]
+    for node in result.nodes:
+        lines.append(
+            f"- `{_md_escape(node.id)}` **{_md_escape(node.label)}** ({_md_escape(node.type)}) - {_md_escape(node.sub)}"
+        )
+    lines.append("")
+    lines.append("## Edges")
+    lines.append("")
+    for edge in result.edges:
+        src = _md_escape(edge.source)
+        tgt = _md_escape(edge.target)
+        lbl = _md_escape(edge.label)
+        typ = _md_escape(edge.type)
+        lines.append(f"- `{src}` --[{lbl}]--> `{tgt}` (type={typ}, step={edge.step})")
+    lines.append("")
+    if result.fixes:
+        lines.append("## Available fixes")
+        lines.append("")
+        for fix in result.fixes:
+            lines.append(f"- **{_md_escape(fix.id)}** {_md_escape(fix.title)} (effort={_md_escape(fix.effort)})")
+        lines.append("")
+    return "\n".join(lines)
 
 
 @app.command()

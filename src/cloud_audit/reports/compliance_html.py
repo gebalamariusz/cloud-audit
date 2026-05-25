@@ -118,8 +118,9 @@ def generate_compliance_html(report: ComplianceReport) -> str:
                                         <pre class="rem-code">{_esc(rem.terraform)}</pre>
                                     </div>
                             """
-                        if rem.doc_url:
-                            controls_html += f'<div class="doc-link"><a href="{_esc(rem.doc_url)}" target="_blank" rel="noopener noreferrer">AWS Documentation</a></div>'
+                        safe_doc = _safe_url(rem.doc_url)
+                        if safe_doc:
+                            controls_html += f'<div class="doc-link"><a href="{safe_doc}" target="_blank" rel="noopener noreferrer">AWS Documentation</a></div>'
 
                     controls_html += "</div>"  # finding
 
@@ -285,6 +286,24 @@ def _esc(text: str) -> str:
         .replace('"', "&quot;")
         .replace("'", "&#x27;")
     )
+
+
+def _safe_url(value: object) -> str:
+    """Block non-http(s) URL schemes (defense-in-depth vs `javascript:`/`data:`)."""
+    from urllib.parse import urlparse
+
+    if value is None:
+        return ""
+    s = str(value).strip()
+    if not s:
+        return ""
+    try:
+        scheme = urlparse(s).scheme.lower()
+    except Exception:
+        return ""
+    if scheme in {"http", "https", ""}:
+        return _esc(s)
+    return ""
 
 
 def _get_version() -> str:

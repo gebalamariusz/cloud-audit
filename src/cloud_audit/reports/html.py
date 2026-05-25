@@ -7,6 +7,7 @@ import logging
 from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -126,9 +127,37 @@ def _load_logo_base64() -> str | None:
     return None
 
 
+def _safe_url(value: object) -> str:
+    """Strip non-web URL schemes from a string before it lands in an `href`.
+
+    Jinja2 `autoescape=True` neutralises angle brackets + quotes but does NOT
+    block URI schemes — `<a href="javascript:...">` is a syntactically fine
+    attribute that browsers will execute on click. A scan JSON crafted by
+    a third party (or fetched untrusted) can stash `javascript:` payloads
+    in `finding.remediation.doc_url` or `cost_estimate.source_url`; this
+    filter rejects anything that is not http/https (relative URLs without a
+    scheme pass through unchanged).
+    """
+    if value is None:
+        return ""
+    s = str(value).strip()
+    if not s:
+        return ""
+    try:
+        scheme = urlparse(s).scheme.lower()
+    except Exception:
+        return ""
+    if scheme in {"http", "https"}:
+        return s
+    if scheme == "":
+        return s  # relative URL; browser resolves against current origin
+    return ""
+
+
 def render_html(report: ScanReport) -> str:
     """Render a ScanReport to a self-contained HTML string."""
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=True)
+    env.filters["safe_url"] = _safe_url
     template = env.get_template("report.html.j2")
 
     # Sort findings by severity for display

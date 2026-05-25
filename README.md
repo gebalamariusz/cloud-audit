@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  Open-source CLI scanner that helps you decide what to fix first &mdash;<br>
+  Open-source CLI scanner that helps you decide what to fix first -<br>
   not just what's wrong.
 </p>
 
@@ -53,6 +53,31 @@ Uses your default AWS credentials and region. Try without an AWS account:
 ```bash
 cloud-audit demo
 ```
+
+### NEW in v2.3: Blast Radius CLI
+
+Walk outward from a single AWS resource and show what an attacker could reach
+if THAT resource were compromised. Pure offline analysis against a saved scan -
+zero AWS API calls at blast-radius time. Seed any EC2 instance, IAM role/user,
+Lambda function, S3 bucket, or Secrets Manager secret.
+
+```bash
+# Quick view: tree of reachable identities + data + impact
+cloud-audit blast-radius --resource i-0abc123def456
+
+# JSON for the blast-audit visualizer (https://blast-audit.haitmg.pl)
+cloud-audit blast-radius --resource arn:aws:iam::123456789012:role/deploy \
+                        --format json --output blast.json
+
+# Mermaid diagram for docs / slides
+cloud-audit blast-radius --resource i-0abc123 --format mermaid
+
+# Markdown summary for PR comments
+cloud-audit blast-radius --resource i-0abc123 --format markdown
+```
+
+See [docs/features/blast-radius.md](docs/features/blast-radius.md) for the
+expansion rules, JSON schema (BlastRadiusGraph v1.0), and risk score heuristic.
 
 ### NEW in v2.2: Threat Feed
 

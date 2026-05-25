@@ -1,6 +1,6 @@
 # Roadmap
 
-> Current version: **v2.0.0** (April 2026)
+> Current version: **v2.3.0** (May 2026)
 
 ## Completed
 
@@ -73,13 +73,17 @@
 
 ## What's Next
 
+### v2.3.0 -- Blast Radius CLI (shipped May 2026)
+
+- **Blast Radius CLI** (MVP) -- `cloud-audit blast-radius --resource <id>` walks outward from a single AWS resource (EC2, IAM Role/User, Lambda, S3 bucket, secret) and reports what an attacker could reach if that resource were compromised. Tree, JSON (BlastRadiusGraph v1.0 schema), Mermaid, and Markdown output. Pure in-memory, no AWS calls at blast-radius time. Built on the existing IAM trust graph + escalation catalog. 26 new tests, 812 total. Includes a full pre-release security pass (SEC-001 through SEC-009 plus F-S2-01 through F-S2-06 hardening — URL scheme allowlisting in HTML reports, symlink-safe writes, markdown injection escape, cycle dedup in BFS).
+
 ### v3.0.0 -- Security Graph & Exposure Analysis (target: June 2026)
 
 **1. Security Graph + Effective Exposure Score**
 In-memory graph (networkx) modeling all resource relationships: VPC routing, subnets, security groups, EC2 instances, IAM roles, policies, S3 buckets, RDS instances. BFS/DFS from internet nodes to high-value targets. Per-resource "effective exposure score" combining network reachability + identity privilege + data sensitivity. Output: "3 paths from internet to production database."
 
-**2. Blast Radius Analysis**
-`cloud-audit blast-radius --resource i-0abc123` shows the full impact zone if a specific resource is compromised: IAM role access, network reach, lateral movement paths, data at risk, breach cost estimate. The inverse of attack path analysis.
+**2. Blast Radius Analysis (full v3.0.0 expansion)**
+MVP shipped in v2.3.0. Remaining for v3.0.0: network reachability (VPC peering, TGW, on-prem CIDR), cross-account propagation, permission boundary / SCP semantic evaluation, data classification (PII / PCI / PHI tagging on buckets), expanded storytelling templates, HTML report integration, MCP server `compute_blast_radius` tool.
 
 **3. NHI (Non-Human Identity) Audit + Data Perimeter Scanner**
 Full inventory of all non-human identities: IAM users with access keys, IAM roles, OIDC providers, Lambda/ECS/CodeBuild execution roles. Aging, rotation, privilege scoring, trust chain mapping. Data perimeter: RCPs, VPC endpoint policies, aws:SourceOrgID conditions, snapshot sharing.

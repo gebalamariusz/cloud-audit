@@ -194,6 +194,13 @@ class ScanReport(BaseModel):
     attack_chains: list[AttackChain] = Field(default_factory=list)
     root_causes: list[RootCauseFix] = Field(default_factory=list)
     escalation_paths: list[EscalationPath] = Field(default_factory=list)
+    # Security graph (v3.0.0+) - SecurityGraph.to_dict() output, or None for
+    # older scans that predate the backbone. Kept as a plain dict so consumers
+    # can round-trip the report without importing the graph module.
+    security_graph: dict[str, object] | None = Field(
+        default=None,
+        description="Optional in-memory SecurityGraph serialized form (v3.0.0+).",
+    )
 
     @property
     def all_findings(self) -> list[Finding]:

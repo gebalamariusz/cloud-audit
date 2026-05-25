@@ -7,6 +7,131 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-05-15
+
+### Added
+
+- **Blast Radius CLI** - new `cloud-audit blast-radius --resource <id>` command
+  that walks outward from a single AWS resource and shows what an attacker
+  could reach if THAT resource were compromised. Pure in-memory analysis
+  against a saved scan - zero AWS API calls at blast-radius time.
+
+  Seed resource types supported:
+  - EC2 instance (short id `i-XXX`)
+  - IAM Role / IAM User (full ARN)
+  - Lambda function (full ARN)
+  - S3 bucket (full ARN)
+  - Secrets Manager secret (full ARN)
+
+  Expansion rules:
+  - Compute -> attached IAM role (via attack chain `viz_steps` from AC-01,
+    AC-02, AC-05 etc.) -> reachable identities and data
+  - Identity -> admin impact node when `escalation_paths` indicate admin
+  - Identity -> AssumeRole chain targets from `iam_trust_graph`
+  - Identity (admin) -> S3 buckets / Secrets Manager secrets present in
+    findings as candidate exfiltration targets
+
+  Output formats (`--format`):
+  - `tree` (default) - Rich tree in CLI with color-coded node types
+  - `json` - BlastRadiusGraph v1.0 schema, the wire-format contract with
+    cloud-audit-demo's 3D visualization (camelCase fields preserved on purpose)
+  - `mermaid` - Mermaid `graph TD` diagram with per-type styling
+  - `markdown` - compact summary for PRs or reports
+
+  Bounds:
+  - `--max-depth N` (default 5) caps BFS hops
+  - `--max-nodes N` (default 50) caps total nodes in the graph
+
+  Pure CLI, no Neo4j, no Docker, no SaaS account. Built on top of the
+  existing `iam_trust_graph` (524 lines, AssumeRole BFS), `iam_analyzer`
+  (706 lines, 60 escalation methods catalog), `correlate` (1574 lines,
+  31 attack-chain rules with `VizStep`s), and `cost_model` so the
+  same fixes you see in `scan` show up under the same finding ids in the
+  blast-radius output. Documented in `docs/features/blast-radius.md`.
+
+- **`exposure` command** - new `cloud-audit exposure` rolls up findings by
+  blast-impact heuristic (which identities/data would compound on the next
+  hop). Complements `blast-radius` (single-seed) with an account-wide view.
+
+### Changed
+
+- **`ScanReport.security_graph`** - new optional field (`dict[str, object] | None`).
+  Populated by the scanner for blast-radius / exposure consumers. Backwards-
+  compatible: existing parsers that don't know the field will keep working
+  thanks to `default=None`.
+
+### Fixed
+
+Nine issues addressed by the pre-release security audit (`SECURITY-AUDIT-2026-05-15.md`):
+
+- **SEC-001** - Mermaid output now HTML-entity escapes user-controlled node
+  labels (`<`, `>`, `&`, `"`, `\`, plus brackets, braces, pipes). Without this,
+  a crafted scan label `</text>` would break out of the Mermaid SVG context
+  when the diagram is rendered in a GitHub README.
+- **SEC-002** - `_make_id` collision protection: when a sanitised candidate id
+  exceeds 120 chars, a SHA-256(prefix + value) suffix is appended so two
+  long-but-different inputs cannot collide post-truncation (CWE-345 / CWE-1023).
+- **SEC-003** - AssumeRole cycle (A->B->A) no longer re-emits the seed role
+  as a lateral target node. ARN-level dedup (`visited_arns`) catches the
+  cross-prefix duplicate that graph-id dedup alone misses.
+- **SEC-004** - `_find_execution_role_for_lambda` now refuses to return a
+  role belonging to a different function (CWE-697 narrow-match): scan with
+  chain for `fnA` and query for `fnB` returns `None`, not `fnA`'s role.
+- **SEC-005** - `--max-depth` and `--max-nodes` are clamped to safe bounds
+  (1..25 and 1..10_000) instead of accepting unbounded user input (DoS).
+- **SEC-006** - `--format tree` + `--output FILE` returns an error instead of
+  silently writing ANSI escape sequences to disk (CWE-684).
+- **SEC-007** - Exception handler in the CLI wraps `OSError` with a friendly
+  message instead of leaking a full Python traceback to stderr.
+- **SEC-008** - Rich console rendering of node lines escapes Rich markup
+  (`[red]...[/]`) found inside scan labels so a crafted scan can't recolor
+  the terminal output.
+- **SEC-009** - Scanner persists `escalation_paths` to the saved scan so
+  blast-radius can read them without re-running the IAM analyzer.
+
+Plus pre-release follow-ups from the second security pass:
+
+- **F-S2-01** - HTML report templates (`report.html.j2`, `compliance_html.py`)
+  now strip non-`http(s)` URL schemes from `finding.cost_estimate.source_url`
+  and `finding.remediation.doc_url`. Without this, a `javascript:` URL in a
+  crafted scan JSON would execute when the user clicks the link in the
+  rendered HTML report.
+- **F-S2-02** - All `--output` writers refuse to follow pre-existing symlinks
+  (TOCTOU symlink attack protection on shared CI runners). The CLI raises a
+  clear error instead of silently clobbering the symlink target.
+- **F-S2-03** - Markdown output (`--format markdown`) now escapes markdown
+  control characters in user-controlled labels so a crafted resource name
+  cannot inject `[link](javascript:...)` into the rendered report.
+- **F-S2-04** - `_resolve_role_arn` falls back to `report.all_findings` when
+  the role isn't present in `escalation_paths` (an EC2 with an attached
+  admin role but no separate escalation path previously returned a
+  seed-only blast graph - now resolves and reports Account Takeover).
+- **F-S2-05** - BFS `--max-depth=1` now surfaces Account Takeover for an
+  EC2 seed with an attached admin role (was off-by-one: compute->role
+  linkage previously consumed the depth budget).
+- **F-S2-06** - Fix/detection matching no longer uses bare `endswith(label)`
+  for short labels - now requires a `/` or `:` boundary, eliminating false
+  positives where label `"admin"` matched `super-admin`.
+
+### Tests
+
+- 786 -> 812 (+26 net). New regression tests in `tests/test_blast_radius.py`
+  and `tests/test_graph.py` cover: resource-type detection (8 regex patterns),
+  empty-scan seed-only behaviour, IAM role -> impact node, EC2 with attached
+  role linkage, Lambda with execution role, max-depth and max-nodes
+  enforcement, Rich tree render, Mermaid `graph TD` shape, JSON schema
+  spot-checks (top-level fields, camelCase preservation, node + edge type
+  enums), fixes and detections pulled from findings, and a full
+  `TestSecurityRegression` class for SEC-001 through SEC-009.
+
+### Schema contract
+
+The JSON output is the schema documented in
+`cloud-audit-demo/src/types/blast-radius.ts` (`BlastRadiusGraph` v1.0).
+Field names are camelCase by intent because the demo's TypeScript types
+are the consumer. A per-file ruff exemption in `pyproject.toml` documents
+this trade-off.
+
 ## [2.2.1] - 2026-05-12
 
 ### Changed
@@ -52,7 +177,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Threat Feed v1** — new `cloud-audit threat-feed` command and a dedicated
+- **Threat Feed v1** - new `cloud-audit threat-feed` command and a dedicated
   detector pipeline (`providers/aws/threat_feed/`) that flags ACTIVE abuse
   indicators rather than misconfiguration. Each pattern has a versioned
   `TF-XXX` ID, maps to the new `Category.THREAT`, and carries external
@@ -61,44 +186,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   Ten patterns shipped:
 
-  - `TF-001-ses-phishing-setup` (MEDIUM/HIGH) — SES email/domain identities
+  - `TF-001-ses-phishing-setup` (MEDIUM/HIGH) - SES email/domain identities
     verified within the last 14 days, with severity escalating when an
     out-of-sandbox account hosts a typosquat-style email identity that has
     no matching domain identity. Tracks the Wiz May 2025 + BleepingComputer
     May 2026 SES abuse campaigns.
-  - `TF-002-lambda-function-url-persistence` (HIGH/CRITICAL) — Lambda
+  - `TF-002-lambda-function-url-persistence` (HIGH/CRITICAL) - Lambda
     functions exposed via `AuthType=NONE` Function URLs, escalating to
     CRITICAL when the execution role grants admin-class permissions
     (matching the role profile of the Nov-Dec 2025 cryptomining campaign).
-  - `TF-003-quarantine-policy` (CRITICAL) — IAM principals with
+  - `TF-003-quarantine-policy` (CRITICAL) - IAM principals with
     `AWSCompromisedKeyQuarantineV1/V2/V3` attached. AWS auto-attaches these
     after detecting credential exposure (typically a public GitHub commit).
-  - `TF-004-trufflehog-ua-cloudtrail` (CRITICAL) — `sts:GetCallerIdentity`
+  - `TF-004-trufflehog-ua-cloudtrail` (CRITICAL) - `sts:GetCallerIdentity`
     calls in the last 24h whose user-agent matches known leaked-credentials
     discovery scanners (TruffleHog, gitleaks, CloudGrappler, DetentionDodger,
     NoseyParker). Confirmed credential validation by an external scanner.
-  - `TF-005-cryptomining-role` (HIGH/CRITICAL) — IAM roles created within
+  - `TF-005-cryptomining-role` (HIGH/CRITICAL) - IAM roles created within
     the last 48 hours that carry broad compute managed policies (EC2 Full,
     PowerUser, Admin, ECS Full, Lambda Full). Escalates to CRITICAL when
     the same role also has SES sending permissions (mining + email-spam
     combo from the documented late-2025 campaign cluster).
-  - `TF-006-mmdsv1-in-use` (HIGH/CRITICAL) — EC2 instances where
+  - `TF-006-mmdsv1-in-use` (HIGH/CRITICAL) - EC2 instances where
     `HttpTokens != required` (IMDSv1 still callable) and Bedrock AgentCore
-    agents on `metadataVersion=v1` (CRITICAL — addresses Unit 42 'Cracks in
+    agents on `metadataVersion=v1` (CRITICAL - addresses Unit 42 'Cracks in
     the Bedrock' research and the Feb 2026 MMDSv2 default).
-  - `TF-007-whoami-confusion` (MEDIUM) — IAM roles trusted by CI/CD
+  - `TF-007-whoami-confusion` (MEDIUM) - IAM roles trusted by CI/CD
     identities (codebuild service principals, GitHub OIDC, GitLab OIDC,
-    Buildkite federation) that have a broad EC2 managed policy attached —
+    Buildkite federation) that have a broad EC2 managed policy attached -
     the precondition for the Datadog Feb 2025 whoAMI confusion attack.
-  - `TF-008-cloudtrail-tampering` (HIGH/CRITICAL) — CloudTrail trails with
-    `IsLogging=False` (CRITICAL — canonical post-credential-theft attacker
+  - `TF-008-cloudtrail-tampering` (HIGH/CRITICAL) - CloudTrail trails with
+    `IsLogging=False` (CRITICAL - canonical post-credential-theft attacker
     behaviour, AiTM phishing follow-on per Datadog March 2026) or with a
-    populated `LatestDeliveryError` (HIGH — S3 destination broken).
-  - `TF-009-roles-anywhere-abuse` (HIGH/MEDIUM) — IAM Roles Anywhere trust
+    populated `LatestDeliveryError` (HIGH - S3 destination broken).
+  - `TF-009-roles-anywhere-abuse` (HIGH/MEDIUM) - IAM Roles Anywhere trust
     anchors with `sourceType=CERTIFICATE_BUNDLE` instead of the recommended
     AWS_ACM_PCA. Anyone able to issue a chain-valid cert can mint AWS
     credentials (fwd:cloudsec 2025 'Let's Encrypt for AWS Console').
-  - `TF-010-datazone-overgrant` (HIGH) — `AmazonDataZoneFullAccess` attached
+  - `TF-010-datazone-overgrant` (HIGH) - `AmazonDataZoneFullAccess` attached
     to non-admin principals (the "easy" onboarding policy that bridges
     identity, Glue catalog, and S3 storage in a single grant).
 
@@ -213,7 +338,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - AC-29: Unpatched Instance Exposed to Internet (CRITICAL)
   - AC-30: Unpatched Instances Without Vulnerability Scanning (HIGH)
   - AC-31: Internet-Exposed Without WAF or Flow Logs (HIGH)
-  - AC-32: CloudTrail Blind Spot — Alarms Non-Functional (HIGH)
+  - AC-32: CloudTrail Blind Spot - Alarms Non-Functional (HIGH)
   - AC-33: All-Public VPC Without Network Segmentation (HIGH)
 - 3 new service modules: AWS Backup, Amazon Inspector, AWS WAF
 - 67 new tests for framework validation (412 total)

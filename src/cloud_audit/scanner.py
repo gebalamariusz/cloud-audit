@@ -176,6 +176,68 @@ def run_scan(
         if not quiet:
             console.print(f"[yellow]Warning: Attack chain detection failed: {e}[/yellow]")
 
+    # Persist IAM escalation paths from the analyzer cache into the report so
+    # downstream consumers (blast-radius, MCP server, anything reading the JSON
+    # offline) see them. The cache is populated by the privilege-escalation
+    # check during the main scan; without this step it never makes it onto the
+    # serialized ScanReport.
+    try:
+        from cloud_audit.providers.aws.iam_analyzer import get_cached_escalation_paths
+
+        report.escalation_paths = get_cached_escalation_paths()
+        report.summary.escalation_paths_detected = len(report.escalation_paths)
+    except Exception as e:
+        if not quiet:
+            console.print(f"[yellow]Warning: Escalation-path persistence failed: {e}[/yellow]")
+
+    # Build the unified Security Graph (v3.0.0+) from the artifacts already
+    # produced during this scan. Pure transformation - no extra API calls.
+    try:
+        from cloud_audit.graph import build_from_scan_artifacts
+        from cloud_audit.providers.aws.iam_analyzer import (
+            get_authorization_details,
+            resolve_principals,
+        )
+        from cloud_audit.providers.aws.iam_trust_graph import build_assume_role_graph
+
+        trust_graph = None
+        try:
+            # Reuse the auth details if the IAM check already fetched them; if
+            # not, this is a one-line paginated call (idempotent, free).
+            # AWS-only path: the IAM analyzer is AWS-specific and the graph
+            # only populates rich IAM edges when running against the AWS
+            # provider. Skip silently on other providers.
+            from cloud_audit.providers.aws.provider import AWSProvider
+
+            if isinstance(provider, AWSProvider):
+                auth_details = get_authorization_details(provider)
+                trust_graph = build_assume_role_graph(auth_details)
+                # resolve_principals fidelity is used for ARN-side links; if it
+                # fails, the graph still works on lighter data.
+                _ = resolve_principals(auth_details)
+        except Exception:
+            trust_graph = None
+
+        # collect_relationships() was already called above for chain detection;
+        # safe to call again here - it short-circuits on empty findings
+        from cloud_audit.correlate import collect_relationships
+
+        try:
+            relationships = collect_relationships(provider, report.all_findings)  # type: ignore[arg-type]
+        except Exception:
+            relationships = None
+
+        sec_graph = build_from_scan_artifacts(
+            escalation_paths=report.escalation_paths,
+            iam_trust_graph=trust_graph,
+            resource_relationships=relationships,
+            findings=report.all_findings,
+        )
+        report.security_graph = sec_graph.to_dict()
+    except Exception as e:
+        if not quiet:
+            console.print(f"[yellow]Warning: Security graph build failed: {e}[/yellow]")
+
     if not quiet and report.attack_chains:
         console.print(f"[bold]{len(report.attack_chains)} attack chains detected[/bold]")
 
