@@ -17,7 +17,7 @@ Each of those is a distinct gap with a distinct fix.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from cloud_audit.models import Category, CheckResult, Effort, Finding, Remediation, Severity
 
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from cloud_audit.providers.base import CheckFn
 
 
-def _is_service_linked_recorder(recorder: dict) -> bool:
+def _is_service_linked_recorder(recorder: dict[str, Any]) -> bool:
     """Detect AWS service-linked recorders that should be ignored by audit checks.
 
     Service-linked recorders are created by other AWS services (for example
@@ -34,7 +34,7 @@ def _is_service_linked_recorder(recorder: dict) -> bool:
     They satisfy the recorder's own purpose but do NOT replace a
     customer-managed recorder. Treat them as if they did not exist.
     """
-    return recorder.get("recordingScope", "PAID") == "INTERNAL"
+    return bool(recorder.get("recordingScope", "PAID") == "INTERNAL")
 
 
 def check_config_enabled(provider: AWSProvider) -> CheckResult:
@@ -168,7 +168,7 @@ def check_config_recorder_active(provider: AWSProvider) -> CheckResult:
     return result
 
 
-def _is_recording_group_complete(recording_group: dict) -> tuple[bool, str]:
+def _is_recording_group_complete(recording_group: dict[str, Any]) -> tuple[bool, str]:
     """Check whether a recording group records all supported resource types.
 
     Returns a (is_complete, reason) tuple. A recording group is complete when
@@ -294,7 +294,7 @@ def check_recording_group_complete(provider: AWSProvider) -> CheckResult:
     return result
 
 
-def _evaluate_delivery_channel(channel: dict) -> tuple[Severity | None, str, str]:
+def _evaluate_delivery_channel(channel: dict[str, Any]) -> tuple[Severity | None, str, str]:
     """Evaluate a single delivery channel.
 
     Returns ``(severity, title_suffix, description_detail)`` if the channel

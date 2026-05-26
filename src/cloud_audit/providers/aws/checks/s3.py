@@ -366,7 +366,7 @@ def _get_versioning_status(s3_client: Any, bucket_name: str) -> str:
     """
     try:
         resp = s3_client.get_bucket_versioning(Bucket=bucket_name)
-        return resp.get("Status", "Disabled")
+        return str(resp.get("Status", "Disabled"))
     except Exception as exc:
         error_code = getattr(exc, "response", {}).get("Error", {}).get("Code", "")
         if error_code in ("NoSuchBucket", "AccessDenied"):
