@@ -71,7 +71,9 @@
         "aws-cfg-001",
         "aws-cfg-002",
         "aws-account-001",
-        "aws-ct-008"
+        "aws-ct-008",
+        "aws-cfg-003",
+        "aws-cfg-004"
       ],
       "manual_steps": "Verify that CloudTrail and AWS Config provide the quality audit data needed for control decisions, and that security contact is registered for notifications. Manual review of information quality processes is also required.",
       "evidence_template": "Audit trail and notification infrastructure was verified: CloudTrail multi-region logging and log validation, CloudTrail CloudWatch Logs delivery for real-time analysis, AWS Config recorder presence and status, security contact registered. {pass_count}/{total_count} check(s) passed. {findings_summary}"
@@ -147,7 +149,9 @@
         "aws-cfg-001",
         "aws-cfg-002",
         "aws-cw-005",
-        "aws-cw-009"
+        "aws-cw-009",
+        "aws-cfg-003",
+        "aws-cfg-004"
       ],
       "manual_steps": "Automated checks verify that change detection services are active: AWS Config records configuration changes, CloudWatch alarms detect CloudTrail and Config modifications. Manual review of change impact assessment processes is also required.",
       "evidence_template": "Change detection infrastructure was verified: AWS Config recorder active, CloudWatch alarms for CloudTrail and Config configuration changes. {pass_count}/{total_count} check(s) passed. {findings_summary}"
@@ -161,7 +165,9 @@
       "checks": [
         "aws-cfg-001",
         "aws-cfg-002",
-        "aws-sh-001"
+        "aws-sh-001",
+        "aws-cfg-003",
+        "aws-cfg-004"
       ],
       "manual_steps": "Automated checks verify that continuous evaluation services are enabled: AWS Config continuously evaluates resource compliance, Security Hub aggregates and scores findings. Manual review of evaluation cadence and internal audit processes is also required.",
       "evidence_template": "Continuous evaluation infrastructure was verified: AWS Config recorder active with compliance evaluation, Security Hub enabled for aggregated findings. {pass_count}/{total_count} check(s) passed. {findings_summary}"
@@ -246,7 +252,8 @@
         "aws-ec2-002",
         "aws-ec2-006",
         "aws-rds-002",
-        "aws-efs-001"
+        "aws-efs-001",
+        "aws-ddb-001"
       ],
       "manual_steps": "",
       "evidence_template": "Logical access security was verified: MFA enforcement (root and IAM users), password policy strength, IAM role session duration limits, KMS key rotation and policies, S3 public access blocks and encryption, EBS/RDS/EFS encryption at rest. {pass_count}/{total_count} check(s) passed. {findings_summary}"
@@ -381,7 +388,9 @@
         "aws-iam-012",
         "aws-ssm-001",
         "aws-ssm-003",
-        "aws-inspector-001"
+        "aws-inspector-001",
+        "aws-cfg-003",
+        "aws-cfg-004"
       ],
       "manual_steps": "",
       "evidence_template": "Vulnerability detection and change monitoring was verified: Security Hub enabled, AWS Config recorder active with change tracking, IAM Access Analyzer enabled for external access analysis, EC2 instances managed by SSM for patching, EC2 patch compliance via SSM verified, Amazon Inspector enabled for vulnerability scanning. {pass_count}/{total_count} check(s) passed. {findings_summary}"
@@ -473,7 +482,9 @@
         "aws-cw-012",
         "aws-cw-013",
         "aws-cw-014",
-        "aws-ssm-003"
+        "aws-ssm-003",
+        "aws-cfg-003",
+        "aws-cfg-004"
       ],
       "manual_steps": "Automated checks verify change detection: AWS Config tracks configuration changes, CloudWatch alarms detect unauthorized modifications to CloudTrail, Config, security groups, NACLs, gateways, routes, and VPCs, SSM patch compliance tracks system-level changes. Manual review of change management procedures, approval workflows, and testing requirements is also required.",
       "evidence_template": "Change detection infrastructure was verified: AWS Config recorder active, CloudWatch alarms for CloudTrail/Config/security group/NACL/gateway/route table/VPC changes, SSM patch compliance for managed instances. {pass_count}/{total_count} check(s) passed. {findings_summary}"
@@ -524,7 +535,8 @@
         "aws-s3-003",
         "aws-s3-004",
         "aws-ec2-005",
-        "aws-backup-001"
+        "aws-backup-001",
+        "aws-ddb-002"
       ],
       "manual_steps": "",
       "evidence_template": "Backup and recovery infrastructure was verified: RDS Multi-AZ failover, S3 versioning, S3 lifecycle policies, EC2 termination protection, AWS Backup vault with backup plan. {pass_count}/{total_count} check(s) passed. {findings_summary}"

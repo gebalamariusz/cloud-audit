@@ -41,7 +41,9 @@
         "aws-cfg-001",
         "aws-cfg-002",
         "aws-ec2-003",
-        "aws-eip-001"
+        "aws-eip-001",
+        "aws-cfg-003",
+        "aws-cfg-004"
       ],
       "manual_steps": "Automated checks verify that AWS Config is enabled and recording resource inventory, stopped instances are identified as potentially orphaned assets, and unused Elastic IPs are flagged. Manual review required: formal asset register, classification scheme, data flow mapping, and system boundary documentation.",
       "evidence_template": "Asset discovery infrastructure verified: AWS Config recorder enabled and active, stopped EC2 instances identified, unused Elastic IPs flagged. {pass_count}/{total_count} check(s) passed. {findings_summary} Manual review of formal asset inventory and classification scheme is also required."
@@ -246,7 +248,9 @@
         "aws-ssm-001",
         "aws-ssm-002",
         "aws-cfg-001",
-        "aws-cfg-002"
+        "aws-cfg-002",
+        "aws-cfg-003",
+        "aws-cfg-004"
       ],
       "manual_steps": "Automated checks verify automated patching capabilities (RDS auto upgrade, SSM managed instances, SSM compliance), runtime currency (Lambda), and configuration tracking (AWS Config). Manual review required: security requirements in procurement processes, secure development standards, change management procedures, and vulnerability disclosure policy.",
       "evidence_template": "Secure acquisition and maintenance controls verified: RDS auto minor version upgrade, Lambda runtime currency, SSM managed instances and compliance, AWS Config recording. {pass_count}/{total_count} check(s) passed. {findings_summary} Manual review of procurement security requirements and development standards is also required per Article 21(2)(e)."
@@ -287,7 +291,10 @@
         "aws-ecs-001",
         "aws-ecs-003",
         "aws-lambda-001",
-        "aws-waf-001"
+        "aws-waf-001",
+        "aws-cfg-003",
+        "aws-cfg-004",
+        "aws-ddb-001"
       ],
       "manual_steps": "Verify: AWS Config enabled and recording configuration changes, default VPC usage reviewed, default security group rules locked down, VPC subnet isolation (public/private separation) verified, EC2 instances use IMDSv2 (hardened metadata), default EBS encryption enabled, IAM password policy meets organizational standards, ECS container health checks configured, ECS logging enabled, Lambda functions not using deprecated runtimes, WAFv2 WebACL exists for web application protection. Review configuration management policy and change authorization procedures.",
       "evidence_template": "Secure configuration management verified: AWS Config enabled and recording, default VPC usage reviewed, default security group hardened, VPC subnet isolation verified, IMDSv2 enforced, default EBS encryption enabled, IAM password policy configured, ECS health checks and logging in place, Lambda runtime configuration reviewed, WAFv2 WebACL verified. {pass_count}/{total_count} check(s) passed. {findings_summary}"
@@ -319,7 +326,9 @@
         "aws-sh-001",
         "aws-cfg-001",
         "aws-cfg-002",
-        "aws-ct-001"
+        "aws-ct-001",
+        "aws-cfg-003",
+        "aws-cfg-004"
       ],
       "manual_steps": "Automated checks verify that continuous monitoring services (GuardDuty, Security Hub, AWS Config, CloudTrail) are enabled to provide ongoing assessment of control effectiveness. Manual review required: security audit program, penetration testing schedule, control effectiveness metrics, management review process, and evidence of corrective actions from assessments.",
       "evidence_template": "Continuous monitoring for effectiveness assessment verified: GuardDuty enabled, Security Hub enabled, AWS Config enabled and recording, CloudTrail enabled. {pass_count}/{total_count} check(s) passed. {findings_summary} Manual review of security audit program and effectiveness assessment procedures is also required per Article 21(2)(f)."
@@ -345,7 +354,9 @@
         "aws-cfg-002",
         "aws-sh-001",
         "aws-ct-001",
-        "aws-ct-002"
+        "aws-ct-002",
+        "aws-cfg-003",
+        "aws-cfg-004"
       ],
       "manual_steps": "Automated checks verify that compliance monitoring infrastructure is in place: AWS Config for configuration compliance, Security Hub for security standards, CloudTrail for audit trail integrity. Manual review required: compliance monitoring schedule, deviation handling procedures, and reporting to management body.",
       "evidence_template": "Compliance monitoring infrastructure verified: AWS Config enabled and recording, Security Hub enabled, CloudTrail enabled with log validation. {pass_count}/{total_count} check(s) passed. {findings_summary} Manual review of compliance monitoring procedures and deviation handling is also required."
@@ -633,7 +644,9 @@
         "aws-gd-001",
         "aws-sh-001",
         "aws-iam-012",
-        "aws-cfg-001"
+        "aws-cfg-001",
+        "aws-cfg-003",
+        "aws-cfg-004"
       ],
       "manual_steps": "Automated checks verify that foundational risk identification services are enabled as a proportionate baseline. Manual review required: documented risk-based justification for the chosen level of security measures, proportionality assessment considering entity size and risk exposure, reference to applicable European and international standards (e.g., ISO 27001, ENISA guidelines), and cost-benefit documentation.",
       "evidence_template": "Foundational risk identification services as proportionate baseline verified: GuardDuty enabled, Security Hub enabled, IAM Access Analyzer active, AWS Config recording. {pass_count}/{total_count} check(s) passed. {findings_summary} Manual review of proportionality assessment and risk-based justification for security measures is required per Article 21(1) and 21(3)."

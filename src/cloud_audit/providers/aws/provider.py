@@ -16,6 +16,7 @@ from cloud_audit.providers.aws.checks import (
     cloudtrail,
     cloudwatch,
     config_,
+    ddb,
     ec2,
     ecs,
     efs,
@@ -66,6 +67,7 @@ _CHECK_MODULES = [
     waf,
     bedrock,
     sagemaker,
+    ddb,
     threat_feed,
 ]
 
@@ -141,11 +143,13 @@ class AWSProvider(BaseProvider):
     def reset_caches(self) -> None:
         """Reset per-scan caches for all AWS check modules."""
         from cloud_audit.providers.aws.checks.cloudtrail import _reset_trail_cache
+        from cloud_audit.providers.aws.checks.ddb import _reset_ddb_cache
         from cloud_audit.providers.aws.checks.s3 import _reset_bucket_cache
         from cloud_audit.providers.aws.iam_analyzer import _reset_escalation_cache
 
         _reset_bucket_cache()
         _reset_trail_cache()
+        _reset_ddb_cache()
         _reset_escalation_cache()
 
     def get_checks(self, categories: list[str] | None = None) -> list[CheckFn]:

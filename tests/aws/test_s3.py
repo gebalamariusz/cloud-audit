@@ -146,7 +146,7 @@ def test_bucket_versioning_fail(mock_aws_provider: AWSProvider) -> None:
 
 
 def test_bucket_lifecycle_pass(mock_aws_provider: AWSProvider) -> None:
-    """Bucket with lifecycle rules - no finding."""
+    """Unversioned bucket with full lifecycle (transition + AbortMPU) - no finding."""
     s3 = mock_aws_provider.session.client("s3")
     s3.create_bucket(
         Bucket="lifecycle-bucket",
@@ -161,6 +161,7 @@ def test_bucket_lifecycle_pass(mock_aws_provider: AWSProvider) -> None:
                     "Status": "Enabled",
                     "Filter": {"Prefix": ""},
                     "Transitions": [{"Days": 90, "StorageClass": "GLACIER"}],
+                    "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 7},
                 }
             ]
         },
@@ -171,7 +172,7 @@ def test_bucket_lifecycle_pass(mock_aws_provider: AWSProvider) -> None:
 
 
 def test_bucket_lifecycle_fail(mock_aws_provider: AWSProvider) -> None:
-    """Bucket without lifecycle rules - LOW finding."""
+    """Unversioned bucket without lifecycle rules - LOW finding."""
     s3 = mock_aws_provider.session.client("s3")
     s3.create_bucket(
         Bucket="no-lifecycle-bucket",
@@ -182,6 +183,122 @@ def test_bucket_lifecycle_fail(mock_aws_provider: AWSProvider) -> None:
     assert len(findings) == 1
     assert findings[0].severity.value == "low"
     assert findings[0].category.value == "cost"
+    assert findings[0].region == "global"
+
+
+def test_bucket_lifecycle_versioned_without_ncve_medium(mock_aws_provider: AWSProvider) -> None:
+    """Versioning-enabled bucket with no lifecycle - MEDIUM (storage runaway)."""
+    s3 = mock_aws_provider.session.client("s3")
+    s3.create_bucket(
+        Bucket="versioned-no-lifecycle",
+        CreateBucketConfiguration={"LocationConstraint": "eu-central-1"},
+    )
+    s3.put_bucket_versioning(
+        Bucket="versioned-no-lifecycle",
+        VersioningConfiguration={"Status": "Enabled"},
+    )
+
+    result = check_bucket_lifecycle(mock_aws_provider)
+    findings = [f for f in result.findings if f.resource_id == "versioned-no-lifecycle"]
+    assert len(findings) == 1
+    assert findings[0].severity.value == "medium"
+    assert "noncurrent" in findings[0].title.lower()
+
+
+def test_bucket_lifecycle_versioned_with_ncve_passes(mock_aws_provider: AWSProvider) -> None:
+    """Versioning-enabled bucket with NCVE + AbortMPU lifecycle rule - no finding."""
+    s3 = mock_aws_provider.session.client("s3")
+    s3.create_bucket(
+        Bucket="versioned-with-ncve",
+        CreateBucketConfiguration={"LocationConstraint": "eu-central-1"},
+    )
+    s3.put_bucket_versioning(
+        Bucket="versioned-with-ncve",
+        VersioningConfiguration={"Status": "Enabled"},
+    )
+    s3.put_bucket_lifecycle_configuration(
+        Bucket="versioned-with-ncve",
+        LifecycleConfiguration={
+            "Rules": [
+                {
+                    "ID": "expire-noncurrent",
+                    "Status": "Enabled",
+                    "Filter": {"Prefix": ""},
+                    "NoncurrentVersionExpiration": {"NoncurrentDays": 90},
+                    "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 7},
+                }
+            ]
+        },
+    )
+
+    result = check_bucket_lifecycle(mock_aws_provider)
+    findings = [f for f in result.findings if f.resource_id == "versioned-with-ncve"]
+    assert len(findings) == 0
+
+
+def test_bucket_lifecycle_versioned_rules_without_ncve_medium(
+    mock_aws_provider: AWSProvider,
+) -> None:
+    """Versioning-enabled bucket with lifecycle but missing NCVE - MEDIUM finding."""
+    s3 = mock_aws_provider.session.client("s3")
+    s3.create_bucket(
+        Bucket="versioned-rules-no-ncve",
+        CreateBucketConfiguration={"LocationConstraint": "eu-central-1"},
+    )
+    s3.put_bucket_versioning(
+        Bucket="versioned-rules-no-ncve",
+        VersioningConfiguration={"Status": "Enabled"},
+    )
+    # Rule with transitions and AbortMPU but no NoncurrentVersionExpiration
+    s3.put_bucket_lifecycle_configuration(
+        Bucket="versioned-rules-no-ncve",
+        LifecycleConfiguration={
+            "Rules": [
+                {
+                    "ID": "archive-only",
+                    "Status": "Enabled",
+                    "Filter": {"Prefix": ""},
+                    "Transitions": [{"Days": 90, "StorageClass": "GLACIER"}],
+                    "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 7},
+                }
+            ]
+        },
+    )
+
+    result = check_bucket_lifecycle(mock_aws_provider)
+    findings = [f for f in result.findings if f.resource_id == "versioned-rules-no-ncve"]
+    assert len(findings) == 1
+    assert findings[0].severity.value == "medium"
+    assert "NoncurrentVersionExpiration" in findings[0].title
+
+
+def test_bucket_lifecycle_missing_abort_mpu_low(mock_aws_provider: AWSProvider) -> None:
+    """Unversioned bucket with lifecycle but no AbortMPU - LOW finding."""
+    s3 = mock_aws_provider.session.client("s3")
+    s3.create_bucket(
+        Bucket="no-abort-mpu-bucket",
+        CreateBucketConfiguration={"LocationConstraint": "eu-central-1"},
+    )
+    # Rule with transition but no AbortMPU
+    s3.put_bucket_lifecycle_configuration(
+        Bucket="no-abort-mpu-bucket",
+        LifecycleConfiguration={
+            "Rules": [
+                {
+                    "ID": "archive-only",
+                    "Status": "Enabled",
+                    "Filter": {"Prefix": ""},
+                    "Transitions": [{"Days": 90, "StorageClass": "GLACIER"}],
+                }
+            ]
+        },
+    )
+
+    result = check_bucket_lifecycle(mock_aws_provider)
+    findings = [f for f in result.findings if f.resource_id == "no-abort-mpu-bucket"]
+    assert len(findings) == 1
+    assert findings[0].severity.value == "low"
+    assert "AbortIncompleteMultipartUpload" in findings[0].title
 
 
 def test_access_logging_pass(mock_aws_provider: AWSProvider) -> None:

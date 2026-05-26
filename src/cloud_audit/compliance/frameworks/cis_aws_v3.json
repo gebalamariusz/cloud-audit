@@ -398,7 +398,9 @@
       "description": "AWS Config records resource configurations and changes. It should be enabled in all regions for complete visibility.",
       "checks": [
         "aws-cfg-001",
-        "aws-cfg-002"
+        "aws-cfg-002",
+        "aws-cfg-003",
+        "aws-cfg-004"
       ],
       "manual_steps": "",
       "evidence_template": "AWS Config recorder status was verified via DescribeConfigurationRecorders and DescribeConfigurationRecorderStatus. {pass_count}/{total_count} check(s) passed. {findings_summary}"

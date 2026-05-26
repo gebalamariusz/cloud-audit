@@ -293,8 +293,111 @@ def _lifecycle_remediation(name: str) -> Remediation:
     )
 
 
+def _versioned_lifecycle_remediation(name: str) -> Remediation:
+    """Build remediation for a versioned bucket missing NoncurrentVersionExpiration."""
+    return Remediation(
+        cli=(
+            f"aws s3api put-bucket-lifecycle-configuration --bucket {name} "
+            f"--lifecycle-configuration '{{"
+            f'"Rules":[{{"ID":"expire-noncurrent","Status":"Enabled",'
+            f'"Filter":{{"Prefix":""}},'
+            f'"NoncurrentVersionExpiration":{{"NoncurrentDays":90}},'
+            f'"AbortIncompleteMultipartUpload":{{"DaysAfterInitiation":7}}}}]}}\''
+        ),
+        terraform=(
+            f'resource "aws_s3_bucket_lifecycle_configuration" "{_tf_name(name)}" {{\n'
+            f'  bucket = "{name}"\n'
+            f"  rule {{\n"
+            f'    id     = "expire-noncurrent"\n'
+            f'    status = "Enabled"\n'
+            f"    filter {{}}\n\n"
+            f"    noncurrent_version_expiration {{\n"
+            f"      noncurrent_days = 90  # or your retention policy\n"
+            f"    }}\n\n"
+            f"    abort_incomplete_multipart_upload {{\n"
+            f"      days_after_initiation = 7\n"
+            f"    }}\n"
+            f"  }}\n"
+            f"}}"
+        ),
+        doc_url=(
+            "https://docs.aws.amazon.com/AmazonS3/latest/userguide/"
+            "lifecycle-configuration-examples.html#lifecycle-config-conceptual-ex6"
+        ),
+        effort=Effort.LOW,
+    )
+
+
+def _abort_multipart_remediation(name: str) -> Remediation:
+    """Build remediation for missing AbortIncompleteMultipartUpload."""
+    return Remediation(
+        cli=(
+            f"aws s3api put-bucket-lifecycle-configuration --bucket {name} "
+            f"--lifecycle-configuration '{{"
+            f'"Rules":[{{"ID":"abort-incomplete-mpu","Status":"Enabled",'
+            f'"Filter":{{"Prefix":""}},'
+            f'"AbortIncompleteMultipartUpload":{{"DaysAfterInitiation":7}}}}]}}\''
+        ),
+        terraform=(
+            f'resource "aws_s3_bucket_lifecycle_configuration" "{_tf_name(name)}" {{\n'
+            f'  bucket = "{name}"\n'
+            f"  rule {{\n"
+            f'    id     = "abort-incomplete-mpu"\n'
+            f'    status = "Enabled"\n'
+            f"    filter {{}}\n\n"
+            f"    abort_incomplete_multipart_upload {{\n"
+            f"      days_after_initiation = 7\n"
+            f"    }}\n"
+            f"  }}\n"
+            f"}}"
+        ),
+        doc_url=(
+            "https://docs.aws.amazon.com/AmazonS3/latest/userguide/mpu-abort-incomplete-mpu-lifecycle-config.html"
+        ),
+        effort=Effort.LOW,
+    )
+
+
+def _get_versioning_status(s3_client: Any, bucket_name: str) -> str:
+    """Return bucket versioning status: 'Enabled', 'Suspended', or 'Disabled'.
+
+    An unversioned bucket returns ``{}`` from get_bucket_versioning (no Status key)
+    - we treat that as ``'Disabled'``.
+    """
+    try:
+        resp = s3_client.get_bucket_versioning(Bucket=bucket_name)
+        return resp.get("Status", "Disabled")
+    except Exception as exc:
+        error_code = getattr(exc, "response", {}).get("Error", {}).get("Code", "")
+        if error_code in ("NoSuchBucket", "AccessDenied"):
+            return "Disabled"  # safe fallback - don't escalate findings on inaccessible buckets
+        raise
+
+
 def check_bucket_lifecycle(provider: AWSProvider) -> CheckResult:
-    """Check if S3 buckets have lifecycle rules configured."""
+    """Check if S3 buckets have lifecycle rules covering versioned objects and multipart uploads.
+
+    Emits 1-3 findings per bucket based on the cross-product of versioning
+    status and lifecycle configuration:
+
+    - **Versioning Enabled/Suspended + no NoncurrentVersionExpiration rule**:
+      ``MEDIUM`` severity - storage cost runaway. Every overwrite or delete
+      keeps the old object version forever, billed at full storage rates.
+      At production scale this routinely reaches thousands of USD per month
+      of pure waste. AWS Security Hub S3.10 anchors this at MEDIUM with the
+      same rationale.
+    - **No lifecycle policy at all** (versioning Disabled): ``LOW`` severity -
+      objects never transition to cheaper storage classes. Existing behaviour
+      preserved.
+    - **Lifecycle rules exist but none are Enabled**: ``LOW`` - rules are
+      configured but inactive.
+    - **No AbortIncompleteMultipartUpload rule**: ``LOW`` - orphaned multipart
+      uploads accumulate billable storage that never appears in regular
+      object listings.
+
+    Versioning Enabled buckets are evaluated first because the cost impact
+    is materially higher than the unversioned case.
+    """
     s3 = provider.session.client("s3")
     result = CheckResult(check_id="aws-s3-004", check_name="S3 bucket lifecycle policy")
 
@@ -305,26 +408,61 @@ def check_bucket_lifecycle(provider: AWSProvider) -> CheckResult:
             result.resources_scanned += 1
 
             try:
+                versioning_status = _get_versioning_status(s3, name)
+            except Exception:
+                # Can't read versioning - skip the bucket entirely rather than emit false positives
+                continue
+
+            versioning_active = versioning_status in ("Enabled", "Suspended")
+
+            try:
                 lifecycle = s3.get_bucket_lifecycle_configuration(Bucket=name)
                 rules = lifecycle.get("Rules", [])
-                has_enabled = any(r.get("Status") == "Enabled" for r in rules)
-                if not has_enabled:
-                    result.findings.append(
-                        Finding(
-                            check_id="aws-s3-004",
-                            title=f"S3 bucket '{name}' has no active lifecycle rules",
-                            severity=Severity.LOW,
-                            category=Category.COST,
-                            resource_type="AWS::S3::Bucket",
-                            resource_id=name,
-                            description=f"Bucket '{name}' has lifecycle rules but none are enabled. Old or incomplete objects accumulate cost.",
-                            recommendation="Enable lifecycle rules to transition or expire objects automatically.",
-                            remediation=_lifecycle_remediation(name),
-                        )
-                    )
             except Exception as exc:
                 error_code = getattr(exc, "response", {}).get("Error", {}).get("Code", "")
                 if error_code == "NoSuchLifecycleConfiguration":
+                    rules = []
+                elif error_code in ("AccessDenied", "AccessDeniedException"):
+                    continue
+                else:
+                    continue
+
+            enabled_rules = [r for r in rules if r.get("Status") == "Enabled"]
+
+            if not enabled_rules:
+                # No active lifecycle at all
+                if versioning_active:
+                    # Versioned bucket without NCVE - storage runaway
+                    result.findings.append(
+                        Finding(
+                            check_id="aws-s3-004",
+                            title=(
+                                f"S3 bucket '{name}' has versioning {versioning_status.lower()} "
+                                "but no lifecycle rule expires noncurrent versions"
+                            ),
+                            severity=Severity.MEDIUM,
+                            category=Category.COST,
+                            resource_type="AWS::S3::Bucket",
+                            resource_id=name,
+                            description=(
+                                f"Bucket '{name}' has versioning {versioning_status.lower()}, so every "
+                                "overwrite or delete keeps the previous version of the object forever. "
+                                "Without a lifecycle rule containing NoncurrentVersionExpiration, those "
+                                "old versions are billed at full storage rates indefinitely. AWS "
+                                "Security Hub S3.10 anchors this as a Medium-severity cost concern; at "
+                                "production scale it routinely reaches several thousand USD per month "
+                                "of pure waste."
+                            ),
+                            recommendation=(
+                                "Add a lifecycle rule with NoncurrentVersionExpiration (e.g. 90 days) "
+                                "and AbortIncompleteMultipartUpload (e.g. 7 days) covering the entire bucket."
+                            ),
+                            remediation=_versioned_lifecycle_remediation(name),
+                            compliance_refs=["SOC2 A1.2", "ISO27001 A.5.30", "ISO27001 A.8.10"],
+                        )
+                    )
+                else:
+                    # Unversioned bucket without any lifecycle - existing LOW behaviour preserved
                     result.findings.append(
                         Finding(
                             check_id="aws-s3-004",
@@ -333,13 +471,75 @@ def check_bucket_lifecycle(provider: AWSProvider) -> CheckResult:
                             category=Category.COST,
                             resource_type="AWS::S3::Bucket",
                             resource_id=name,
-                            description=f"Bucket '{name}' has no lifecycle configuration. Objects never expire or transition to cheaper storage.",
+                            description=(
+                                f"Bucket '{name}' has no lifecycle configuration. Objects never expire "
+                                "or transition to cheaper storage."
+                            ),
                             recommendation="Add lifecycle rules to transition old objects to Glacier or expire them.",
                             remediation=_lifecycle_remediation(name),
+                            compliance_refs=["SOC2 A1.2", "ISO27001 A.5.30"],
                         )
                     )
-                else:
-                    continue
+                continue
+
+            # Enabled rules exist - check what they actually cover
+
+            # Versioned bucket: need at least one rule with NoncurrentVersionExpiration
+            if versioning_active:
+                has_ncve = any(r.get("NoncurrentVersionExpiration") for r in enabled_rules)
+                if not has_ncve:
+                    result.findings.append(
+                        Finding(
+                            check_id="aws-s3-004",
+                            title=(
+                                f"S3 bucket '{name}' has lifecycle rules but no "
+                                "NoncurrentVersionExpiration for versioned objects"
+                            ),
+                            severity=Severity.MEDIUM,
+                            category=Category.COST,
+                            resource_type="AWS::S3::Bucket",
+                            resource_id=name,
+                            description=(
+                                f"Bucket '{name}' has versioning {versioning_status.lower()} and "
+                                f"{len(enabled_rules)} enabled lifecycle rule(s), but none include "
+                                "NoncurrentVersionExpiration. Old versions of every overwritten or "
+                                "deleted object are billed at full storage rates indefinitely - the "
+                                "same anti-pattern AWS Security Hub S3.10 flags."
+                            ),
+                            recommendation=(
+                                "Add NoncurrentVersionExpiration (e.g. 90 days) to an existing "
+                                "lifecycle rule, or create a new rule that covers the whole bucket."
+                            ),
+                            remediation=_versioned_lifecycle_remediation(name),
+                            compliance_refs=["SOC2 A1.2", "ISO27001 A.5.30", "ISO27001 A.8.10"],
+                        )
+                    )
+
+            # Any bucket: AbortIncompleteMultipartUpload is cheap insurance against orphaned uploads
+            has_abort_mpu = any(r.get("AbortIncompleteMultipartUpload") for r in enabled_rules)
+            if not has_abort_mpu:
+                result.findings.append(
+                    Finding(
+                        check_id="aws-s3-004",
+                        title=(f"S3 bucket '{name}' has no AbortIncompleteMultipartUpload lifecycle rule"),
+                        severity=Severity.LOW,
+                        category=Category.COST,
+                        resource_type="AWS::S3::Bucket",
+                        resource_id=name,
+                        description=(
+                            f"Bucket '{name}' has lifecycle rules but none include "
+                            "AbortIncompleteMultipartUpload. Failed or abandoned multipart uploads "
+                            "leave billable parts in the bucket that never appear in regular object "
+                            "listings - a silent line item on the S3 bill."
+                        ),
+                        recommendation=(
+                            "Add an AbortIncompleteMultipartUpload rule with "
+                            "DaysAfterInitiation=7 (or your retention preference)."
+                        ),
+                        remediation=_abort_multipart_remediation(name),
+                        compliance_refs=["ISO27001 A.5.30"],
+                    )
+                )
     except Exception as e:
         result.error = str(e)
 

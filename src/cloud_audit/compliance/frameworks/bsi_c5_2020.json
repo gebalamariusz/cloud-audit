@@ -254,7 +254,9 @@
       "description": "Assets associated with information and information processing facilities are identified and an inventory of these assets is drawn up and maintained.",
       "checks": [
         "aws-cfg-001",
-        "aws-cfg-002"
+        "aws-cfg-002",
+        "aws-cfg-003",
+        "aws-cfg-004"
       ],
       "manual_steps": "Automated checks verify that AWS Config is enabled and recording resource inventory. Manual review of the broader asset inventory process, including non-AWS assets, is also required.",
       "evidence_template": "AWS Config resource inventory capability verified: Config service enabled and recorder active. {pass_count}/{total_count} check(s) passed. {findings_summary} Manual review of complete asset inventory is also required."
@@ -490,7 +492,8 @@
       "description": "Backup copies of information, software, and system images are taken and tested regularly in accordance with an agreed backup policy.",
       "checks": [
         "aws-s3-003",
-        "aws-rds-003"
+        "aws-rds-003",
+        "aws-ddb-002"
       ],
       "manual_steps": "Automated checks verify S3 versioning for object-level backup and RDS Multi-AZ for database resilience. Manual review of backup policy, backup schedules, and restoration test records is also required.",
       "evidence_template": "Data backup capabilities verified: S3 versioning for object backup protection, RDS Multi-AZ for database resilience. {pass_count}/{total_count} check(s) passed. {findings_summary} Manual review of backup policy and restoration testing is also required."
@@ -595,7 +598,9 @@
       "description": "Audit requirements and activities involving verification of operational systems are carefully planned and agreed to minimise disruptions to business processes.",
       "checks": [
         "aws-cfg-001",
-        "aws-cfg-002"
+        "aws-cfg-002",
+        "aws-cfg-003",
+        "aws-cfg-004"
       ],
       "manual_steps": "Automated checks verify AWS Config is enabled and recording for continuous audit data. Manual review of audit planning, scheduling, and business disruption mitigation is also required.",
       "evidence_template": "Continuous audit capability verified: AWS Config service enabled and recorder active. {pass_count}/{total_count} check(s) passed. {findings_summary} Manual review of audit planning and scheduling is also required."
@@ -949,7 +954,8 @@
         "aws-ec2-006",
         "aws-rds-002",
         "aws-efs-001",
-        "aws-ct-005"
+        "aws-ct-005",
+        "aws-ddb-001"
       ],
       "manual_steps": "",
       "evidence_template": "Data at rest encryption verified: S3 bucket encryption, EBS volume encryption, EBS default encryption, RDS encryption, EFS encryption at rest, CloudTrail KMS encryption. {pass_count}/{total_count} check(s) passed. {findings_summary}"
@@ -1335,7 +1341,9 @@
       "checks": [
         "aws-cfg-001",
         "aws-cfg-002",
-        "aws-sh-001"
+        "aws-sh-001",
+        "aws-cfg-003",
+        "aws-cfg-004"
       ],
       "manual_steps": "Automated checks verify AWS Config and Security Hub are enabled for continuous compliance monitoring. Manual review of management compliance review records is also required.",
       "evidence_template": "Compliance monitoring capabilities verified: AWS Config enabled, Config recorder active, Security Hub enabled. {pass_count}/{total_count} check(s) passed. {findings_summary} Manual review of management compliance review records is also required."
@@ -1349,7 +1357,9 @@
       "checks": [
         "aws-cfg-001",
         "aws-sh-001",
-        "aws-gd-001"
+        "aws-gd-001",
+        "aws-cfg-003",
+        "aws-cfg-004"
       ],
       "manual_steps": "Automated checks verify AWS Config, Security Hub, and GuardDuty are enabled for technical compliance assessment. Manual review of technical review schedule and findings remediation is also required.",
       "evidence_template": "Technical compliance review capabilities verified: AWS Config enabled, Security Hub enabled, GuardDuty enabled. {pass_count}/{total_count} check(s) passed. {findings_summary} Manual review of technical review schedule is also required."
@@ -1382,7 +1392,9 @@
       "description": "The cloud provider makes compliance evidence (audit reports, certifications, attestations) available to customers upon request.",
       "checks": [
         "aws-ct-001",
-        "aws-cfg-001"
+        "aws-cfg-001",
+        "aws-cfg-003",
+        "aws-cfg-004"
       ],
       "manual_steps": "Automated checks verify CloudTrail and AWS Config are enabled to generate compliance evidence data. Manual review of evidence provision procedures and customer access to compliance documentation is also required.",
       "evidence_template": "Compliance evidence generation verified: CloudTrail enabled for audit trail, AWS Config enabled for configuration history. {pass_count}/{total_count} check(s) passed. {findings_summary} Manual review of evidence provision procedures is also required."

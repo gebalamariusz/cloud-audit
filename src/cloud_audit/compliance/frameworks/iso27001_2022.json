@@ -106,7 +106,9 @@
       "description": "An inventory of information and other associated assets, including owners, shall be identified and maintained. AWS Config provides automated resource inventory and tracking.",
       "checks": [
         "aws-cfg-001",
-        "aws-cfg-002"
+        "aws-cfg-002",
+        "aws-cfg-003",
+        "aws-cfg-004"
       ],
       "manual_steps": "Automated checks verify AWS Config is enabled and actively recording resource inventory. Manual review of the complete asset inventory, ownership assignments, and classification is also required.",
       "evidence_template": "AWS Config resource inventory was verified: Config service enabled and recorder active for automated asset discovery. {pass_count}/{total_count} check(s) passed. {findings_summary}"
@@ -279,7 +281,9 @@
         "aws-cfg-002",
         "aws-sh-001",
         "aws-gd-001",
-        "aws-account-001"
+        "aws-account-001",
+        "aws-cfg-003",
+        "aws-cfg-004"
       ],
       "manual_steps": "Automated checks verify foundational cloud security services are enabled: CloudTrail for audit logging, AWS Config for resource tracking, Security Hub for posture management, GuardDuty for threat detection, security contact registered. Manual review of cloud service management procedures, exit strategy, and data portability plan is also required.",
       "evidence_template": "Cloud service security controls were verified: CloudTrail enabled, AWS Config active, Security Hub enabled, GuardDuty active, security contact registered. {pass_count}/{total_count} check(s) passed. {findings_summary}"
@@ -437,7 +441,9 @@
       "checks": [
         "aws-cfg-001",
         "aws-cfg-002",
-        "aws-sh-001"
+        "aws-sh-001",
+        "aws-cfg-003",
+        "aws-cfg-004"
       ],
       "manual_steps": "Automated checks verify compliance monitoring infrastructure: AWS Config for configuration compliance, Security Hub for posture assessment. Manual review of compliance review schedule, self-assessment records, and corrective action tracking is also required.",
       "evidence_template": "Compliance monitoring infrastructure was verified: AWS Config enabled and recording, Security Hub active. {pass_count}/{total_count} check(s) passed. {findings_summary}"
@@ -815,7 +821,9 @@
         "aws-cfg-002",
         "aws-vpc-005",
         "aws-ec2-006",
-        "aws-iam-006"
+        "aws-iam-006",
+        "aws-cfg-003",
+        "aws-cfg-004"
       ],
       "manual_steps": "",
       "evidence_template": "Configuration management was verified: AWS Config enabled and recording, default security group rules locked down, default EBS encryption enabled, IAM password policy configured. {pass_count}/{total_count} check(s) passed. {findings_summary}"
@@ -871,7 +879,8 @@
         "aws-s3-003",
         "aws-s3-007",
         "aws-rds-003",
-        "aws-backup-001"
+        "aws-backup-001",
+        "aws-ddb-002"
       ],
       "manual_steps": "",
       "evidence_template": "Backup controls were verified: S3 versioning for object recovery, S3 MFA Delete for backup protection, RDS Multi-AZ for database redundancy, AWS Backup vault with backup plan for centralized backup management. {pass_count}/{total_count} check(s) passed. {findings_summary}"
@@ -1046,7 +1055,8 @@
         "aws-kms-001",
         "aws-kms-002",
         "aws-ct-005",
-        "aws-s3-006"
+        "aws-s3-006",
+        "aws-ddb-001"
       ],
       "manual_steps": "",
       "evidence_template": "Cryptography controls were verified: S3 encryption, EBS encryption, default EBS encryption, RDS encryption at rest, EFS encryption, KMS key rotation, KMS key policies, CloudTrail KMS encryption, S3 HTTPS enforcement. {pass_count}/{total_count} check(s) passed. {findings_summary}"
@@ -1146,7 +1156,9 @@
         "aws-ct-001",
         "aws-ct-006",
         "aws-cfg-001",
-        "aws-cfg-002"
+        "aws-cfg-002",
+        "aws-cfg-003",
+        "aws-cfg-004"
       ],
       "manual_steps": "Automated checks verify change tracking infrastructure: CloudTrail enabled for API change logging, object-level write logging for data changes, AWS Config for configuration change tracking. Manual review of change management procedures, CAB process, and change approval records is also required.",
       "evidence_template": "Change management infrastructure was verified: CloudTrail for API audit trail, object-level write logging, AWS Config for configuration tracking. {pass_count}/{total_count} check(s) passed. {findings_summary}"

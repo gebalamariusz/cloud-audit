@@ -168,7 +168,7 @@ cloud-audit simulate --fix aws-vpc-002
 # Score: 34 -> 58 (+24)  |  Chains broken: 8 of 22  |  Findings resolved: 11
 ```
 
-94 checks across 23 AWS services. Every finding includes copy-paste AWS CLI + Terraform remediation.
+99 checks across 24 AWS services. Every finding includes copy-paste AWS CLI + Terraform remediation.
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=5uHoqggmTB8">
@@ -266,13 +266,13 @@ claude mcp add cloud-audit -- uvx --from cloud-audit cloud-audit-mcp
 
 [Prowler](https://github.com/prowler-cloud/prowler) is the AWS security standard: 600 checks across 84 services, 44 compliance frameworks (CIS, PCI-DSS, HIPAA, SOC2, NIST 800, ISO 27001, GDPR, FedRAMP, NIS2, MITRE ATT&CK and more), auto-remediation fixers, and graph-based attack path analysis in the Prowler App (Cartography + Neo4j). It also covers Azure, GCP, Kubernetes, M365, and several other providers.
 
-cloud-audit is AWS-only and intentionally narrower (94 curated checks). It goes deep where Prowler goes wide: attack chain correlation and IAM escalation detection run in the free CLI with zero infrastructure, every finding ships with reviewable Terraform + AWS CLI remediation, and scan diff / drift tracking is built into the CLI.
+cloud-audit is AWS-only and intentionally narrower (99 curated checks). It goes deep where Prowler goes wide: attack chain correlation and IAM escalation detection run in the free CLI with zero infrastructure, every finding ships with reviewable Terraform + AWS CLI remediation, and scan diff / drift tracking is built into the CLI.
 
 | Feature | Prowler | cloud-audit |
 |---------|---------|-------------|
-| AWS checks | 600 across 84 services | 94 across 23 services |
+| AWS checks | 600 across 84 services | 99 across 24 services |
 | Compliance frameworks (AWS) | 44 (CIS, PCI-DSS, HIPAA, SOC2, NIST, ISO 27001, GDPR, FedRAMP, NIS2, ...) | 6 (CIS v3.0, SOC 2, BSI C5, ISO 27001, HIPAA, NIS2) |
-| Auto-remediation | 55 fixers across 17 AWS services (direct API calls) | 94/94 findings with CLI + Terraform output (reviewable, you apply) |
+| Auto-remediation | 55 fixers across 17 AWS services (direct API calls) | 99/99 findings with CLI + Terraform output (reviewable, you apply) |
 | Attack path / graph analysis | Prowler App (Cartography + graph queries) | CLI-native (31 rules, no infra) |
 | IAM privilege escalation graph | Prowler App | CLI-native (61 methods + AssumeRole graph) |
 | What-If remediation simulator | No | Yes |
@@ -419,9 +419,9 @@ cloud-audit never modifies your infrastructure. The `simulate` command runs loca
 
 ## What It Checks
 
-94 checks across IAM, S3, EC2, VPC, RDS, EIP, EFS, CloudTrail, GuardDuty, KMS, CloudWatch, Lambda, ECS, SSM, Secrets Manager, AWS Config, Security Hub, Account, AWS Backup, Amazon Inspector, AWS WAF, Amazon Bedrock, and Amazon SageMaker.
+99 checks across IAM, S3, EC2, VPC, RDS, EIP, EFS, CloudTrail, GuardDuty, KMS, CloudWatch, Lambda, ECS, SSM, Secrets Manager, AWS Config, Security Hub, Account, AWS Backup, Amazon Inspector, AWS WAF, Amazon Bedrock, Amazon SageMaker, and Amazon DynamoDB.
 
-[See all 94 checks by service](https://haitmg.pl/cloud-audit/checks/) or run `cloud-audit list-checks` locally.
+[See all 99 checks by service](https://haitmg.pl/cloud-audit/checks/) or run `cloud-audit list-checks` locally.
 
 ## Documentation
 

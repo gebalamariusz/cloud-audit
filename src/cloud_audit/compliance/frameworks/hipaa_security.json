@@ -18,7 +18,9 @@
         "aws-sh-001",
         "aws-iam-012",
         "aws-cfg-001",
-        "aws-cfg-002"
+        "aws-cfg-002",
+        "aws-cfg-003",
+        "aws-cfg-004"
       ],
       "manual_steps": "Automated checks verify that risk identification services (GuardDuty, Security Hub, IAM Access Analyzer, AWS Config) are enabled. A formal risk analysis document covering all ePHI data flows, threat sources, and vulnerability assessments must be completed separately per NIST SP 800-30.",
       "evidence_template": "Automated risk identification services were verified: GuardDuty enabled and findings addressed, Security Hub enabled, IAM Access Analyzer active, AWS Config recorder active. {pass_count}/{total_count} check(s) passed. {findings_summary} A formal documented risk analysis per NIST SP 800-30 is also required."
@@ -253,7 +255,8 @@
         "aws-s3-003",
         "aws-s3-007",
         "aws-rds-003",
-        "aws-backup-001"
+        "aws-backup-001",
+        "aws-ddb-002"
       ],
       "manual_steps": "",
       "evidence_template": "Data backup controls were verified: S3 versioning for object-level recovery, S3 MFA Delete for deletion protection, RDS Multi-AZ for database redundancy, AWS Backup vault with backup plan for centralized backup management. {pass_count}/{total_count} check(s) passed. {findings_summary}"
@@ -314,7 +317,9 @@
         "aws-sh-001",
         "aws-rds-004",
         "aws-ssm-001",
-        "aws-inspector-001"
+        "aws-inspector-001",
+        "aws-cfg-003",
+        "aws-cfg-004"
       ],
       "manual_steps": "Automated checks verify continuous evaluation services: AWS Config recorder active, Security Hub enabled, RDS auto minor version upgrade enabled, EC2 instances managed by SSM for patching, Amazon Inspector enabled for continuous vulnerability scanning. Manual review of periodic evaluation schedule, evaluation methodology, scope documentation, and evidence of evaluations triggered by environmental or operational changes is required.",
       "evidence_template": "Continuous evaluation infrastructure was verified: AWS Config recorder active, Security Hub enabled, RDS auto patching, SSM patch management, Amazon Inspector for vulnerability scanning. {pass_count}/{total_count} check(s) passed. {findings_summary}"
@@ -544,7 +549,8 @@
         "aws-rds-002",
         "aws-efs-001",
         "aws-kms-001",
-        "aws-kms-002"
+        "aws-kms-002",
+        "aws-ddb-001"
       ],
       "manual_steps": "",
       "evidence_template": "Encryption controls were verified: S3 server-side encryption, EBS encryption, EBS default encryption enabled, RDS encryption at rest, EFS encryption, KMS key rotation, KMS key policies. {pass_count}/{total_count} check(s) passed. {findings_summary}"
