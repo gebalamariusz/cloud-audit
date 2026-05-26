@@ -6,6 +6,10 @@
 <h1 align="center">cloud-audit</h1>
 
 <p align="center">
+  <a href="README.md">English</a> | <a href="README_zh-CN.md">简体中文</a>
+</p>
+
+<p align="center">
   <strong>Find AWS attack paths, IAM escalation routes, and the fixes that matter most.</strong>
 </p>
 
