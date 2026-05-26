@@ -1,4 +1,6 @@
-[English](README.md) | [简体中文](README_zh-CN.md)
+<p align="center">
+  <a href="README.md">English</a> | <a href="README_zh-CN.md">简体中文</a>
+</p>
 
 <p align="center">
   <img src="assets/logo-nobg.png" alt="cloud-audit logo" width="200">
