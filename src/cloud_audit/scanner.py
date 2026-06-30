@@ -87,10 +87,15 @@ def run_scan(
     categories: list[str] | None = None,
     config: CloudAuditConfig | None = None,
     quiet: bool = False,
+    verify: bool = False,
 ) -> tuple[ScanReport, int]:
     """Execute all checks for the given provider and return a ScanReport.
 
     Returns (report, suppressed_count).
+
+    When ``verify`` is True (Proof Mode), each detected IAM escalation path is
+    cross-checked against the AWS IAM policy simulator (read-only) and annotated
+    with a ``verified`` flag plus evidence.
     """
     report = ScanReport(provider=provider.get_provider_name())
 
@@ -189,6 +194,25 @@ def run_scan(
     except Exception as e:
         if not quiet:
             console.print(f"[yellow]Warning: Escalation-path persistence failed: {e}[/yellow]")
+
+    # Proof Mode (opt-in): cross-check escalation paths against the read-only IAM
+    # policy simulator. Annotates each path with verified + evidence.
+    if verify and report.escalation_paths:
+        try:
+            from cloud_audit.proof import verify_report_escalations
+            from cloud_audit.providers.aws.provider import AWSProvider
+
+            if isinstance(provider, AWSProvider):
+                verified_count = verify_report_escalations(provider, report.escalation_paths)
+                if not quiet:
+                    console.print(
+                        f"[bold]Proof Mode: {verified_count}/{len(report.escalation_paths)} "
+                        f"escalation path(s) policy-allowed by IAM simulator "
+                        f"(read-only check, not full exploit confirmation)[/bold]"
+                    )
+        except Exception as e:
+            if not quiet:
+                console.print(f"[yellow]Warning: Proof Mode verification failed: {e}[/yellow]")
 
     # Build the unified Security Graph (v3.0.0+) from the artifacts already
     # produced during this scan. Pure transformation - no extra API calls.

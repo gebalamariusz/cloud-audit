@@ -151,6 +151,16 @@ class EscalationPath(BaseModel):
     resource_constraints: list[str] = Field(
         default_factory=list, description="Resource ARN constraints (empty = wildcard)"
     )
+    verified: bool | None = Field(
+        default=None,
+        description=(
+            "Proof Mode: True if exploitability was confirmed via iam:SimulatePrincipalPolicy, "
+            "False if the simulator denied a required action, None if not checked or unavailable."
+        ),
+    )
+    verification_detail: str = Field(
+        default="", description="Evidence/explanation of the Proof Mode verification result."
+    )
 
 
 class RootCauseFix(BaseModel):

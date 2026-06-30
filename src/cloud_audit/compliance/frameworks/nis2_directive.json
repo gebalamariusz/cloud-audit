@@ -502,7 +502,12 @@
         "aws-ec2-001",
         "aws-s3-001",
         "aws-rds-001",
-        "aws-lambda-003"
+        "aws-lambda-003",
+        "aws-dp-001",
+        "aws-dp-002",
+        "aws-dp-003",
+        "aws-dp-004",
+        "aws-dp-005"
       ],
       "manual_steps": "Verify: no wildcard admin policies, policies assigned through groups not directly to users, IAM Access Analyzer active, OIDC trust policies include sub condition, EC2 instances use IAM roles, security groups restrict open access, NACLs are not unrestricted, default security group rules locked down, no public AMIs exposing internal images, no public S3 buckets, no public RDS instances, Lambda resource policies reviewed. Review IAM strategy documentation and access request procedures.",
       "evidence_template": "Identity and access management verified: no wildcard admin policies, group-based permissions, IAM Access Analyzer enabled, OIDC trust conditions verified, EC2 instance roles used, security groups reviewed, NACLs reviewed, default security group hardened, no public AMIs, no public S3 buckets, no public RDS instances, Lambda resource policies reviewed. {pass_count}/{total_count} check(s) passed. {findings_summary}"

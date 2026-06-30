@@ -7,6 +7,108 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-06-30
+
+### Added
+
+- **Data Perimeter Scanner** - new check category (`aws-dp-001` .. `aws-dp-005`)
+  that evaluates resource-based policies for the two boundary failures detectable
+  from a single account's configuration - read-only, and without AWS Organizations
+  access:
+
+  - **Confused deputy**: an `Allow` statement grants an AWS service principal
+    without an `aws:SourceAccount` / `aws:SourceArn` / `aws:SourceOrgID` /
+    `aws:SourceOwner` condition (`MEDIUM`). A service acting on behalf of another
+    account could be coerced into operating on your resource.
+  - **Cross-organization exposure**: an `Allow` statement grants a wildcard
+    (`"*"`) or external-account AWS principal without an organization-boundary
+    condition (`aws:PrincipalOrgID`, `aws:ResourceOrgID`, `aws:SourceOrgID`, ...).
+    Wildcard grants are `HIGH`; a named external account is `LOW` (often an
+    intentional partner share). On Secrets Manager these are escalated to
+    `CRITICAL` (wildcard) / `MEDIUM` (external) as a direct credential-exfiltration
+    path.
+
+  Services covered: S3 bucket policies (`aws-dp-001`), SNS topic policies
+  (`aws-dp-002`), SQS queue policies (`aws-dp-003`), Secrets Manager resource
+  policies (`aws-dp-004`), and Lambda resource policies (`aws-dp-005`). Every
+  finding ships CLI + Terraform remediation and a breach-cost estimate. Condition
+  keys are matched case-insensitively, and condition **values** are evaluated (not
+  just key presence) - a guardrail scoped to a *foreign* account or org is still
+  flagged. Default SNS/SQS policies relying on `aws:SourceOwner` set to the owner
+  account are correctly treated as account-scoped (no false positive). Federated
+  provider ARNs in a foreign account are flagged as external; federated URL IdPs
+  and `CanonicalUser` principals are out of scope.
+
+  This closes a gap the dominant open-source scanner explicitly does not cover
+  (Prowler issue #7114, "Integrating SCP/RCP Policy Awareness", open since
+  2025-03): evaluating data-perimeter condition keys on resource policies. SCP/RCP
+  enforcement at the AWS Organizations level is intentionally out of scope.
+  Detection taxonomy follows the AWS data perimeter whitepaper and the AWS
+  cross-service confused-deputy guidance.
+
+- **Proof Mode** - new opt-in `scan --verify` that cross-checks each detected IAM
+  privilege-escalation path against the read-only `iam:SimulatePrincipalPolicy`
+  API to confirm the principal's policies actually allow the required actions. Each
+  path is annotated `verified` with `verification_detail` evidence: `true` = the
+  simulator allowed every required action (policy-allowed; *simulated, not
+  executed*); `false` = the simulator denied one (the static path is likely a
+  false positive); `null` = not asserted. The scan prints
+  `Proof Mode: N/M escalation path(s) policy-allowed by IAM simulator`. Honest
+  framing throughout: this confirms the permission exists, not end-to-end
+  exploitability - the simulator does not factor in SCPs, permission boundaries,
+  resource policies, or trust conditions. Resource-scoped methods (`iam:PassRole`,
+  `sts:AssumeRole`, compute-hijack) are deliberately left `null` because without
+  resource ARNs the simulator evaluates against `*` and would over-report; paths
+  gated by unevaluated condition keys are also left `null`.
+  `iam:SimulatePrincipalPolicy` has no per-call charge, so the opt-in controls
+  latency/throttling only; calls are deduplicated per (principal, action-set). New
+  module `proof.py`; `EscalationPath` gains `verified` / `verification_detail`
+  (backward compatible, default unchecked). Brings the 2026 "proof, not
+  probability" validation trend - which commercial scanners sell as a paid
+  flagship - to open-source AWS.
+
+- **AgentCore checks** - first OSS scanner with dedicated Amazon Bedrock AgentCore
+  (GA 2025-10) coverage: 6 read-only checks `aws-agc-001..006` over the AI agent
+  platform. Flags Code Interpreter / Runtime in PUBLIC network mode (egress
+  exfiltration), Runtime not enforcing MMDSv2 (metadata credential theft), Memory
+  without a customer-managed KMS key, Gateway with no inbound authorizer
+  (`authorizerType=NONE`), and Gateway with no enforcing policy engine (missing or
+  `LOG_ONLY`). Each finding ships a CLI + Terraform fix and breach-cost estimate,
+  and maps to Palo Alto Unit 42 "Cracks in the Bedrock" research. Read-only
+  `bedrock-agentcore-control` (no per-call charge); the service is regional and
+  absent regions are skipped silently. New module `agentcore.py`; field names,
+  operations and enum values verified against the live boto3 service model.
+
+### Changed
+
+- Check count: 99 -> 110 (across 25 services). AgentCore adds a new service module
+  of 6 checks; the data perimeter's 5 checks remain a cross-cutting category over
+  existing services, like Threat Feed.
+
+### Tests
+
+- 836 -> 948 (+112). New file `tests/aws/test_data_perimeter.py`: 43 unit tests
+  pinning the `_find_perimeter_gaps` detection engine (confused deputy, cross-org
+  wildcard/external, condition-value evaluation so a guardrail pointing at a
+  foreign account/org is still flagged, federated provider ARNs, case-insensitive
+  conditions, Deny/NotPrincipal/CanonicalUser/malformed handling) plus 17 moto
+  integration tests across all five services. New file `tests/test_proof.py`:
+  28 tests pinning the Proof Mode engine (decision semantics: allowed /
+  explicit+implicit deny / unknown-decision / incomplete / empty / malformed; the
+  resource-scoping gate that leaves PassRole/AssumeRole and deny-removal paths
+  unasserted; condition-key gating; API-call dedup; per-path error isolation;
+  provider-backed path). New file `tests/aws/test_agentcore.py`: 24 fixture-based
+  tests (moto lacks bedrock-agentcore-control) covering each check's positive and
+  negative cases across network mode, MMDSv2, memory KMS, gateway authorizer and
+  policy engine, empty policy config, multi-page pagination, plus
+  region-unavailable / access-denied skip and multi-region aggregation.
+
+### Compliance
+
+- `aws-dp-001` .. `aws-dp-005` mapped: SOC 2 (CC5.2, CC6.1, CC6.6, C1.1),
+  CIS AWS v3.0 (2.1.4), HIPAA (164.308(a)(1)(ii)(A), 164.312(a)(1)),
+  ISO/IEC 27001:2022 (A.8.3, A.8.12), NIS2 (NIS2-RM-09a), BSI C5:2020 (IDM-07).
+
 ## [2.3.1] - 2026-05-26
 
 ### Added

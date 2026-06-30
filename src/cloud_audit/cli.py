@@ -501,6 +501,16 @@ def scan(
             help="Compliance framework ID. Use list-frameworks to see all options.",
         ),
     ] = None,
+    verify: Annotated[
+        bool,
+        typer.Option(
+            "--verify",
+            help=(
+                "Proof Mode: check whether each IAM escalation path's required actions are actually "
+                "allowed, via the read-only iam:SimulatePrincipalPolicy (opt-in; adds IAM API calls)."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Scan cloud infrastructure and generate an audit report."""
     from cloud_audit.config import CloudAuditConfig, load_config
@@ -588,6 +598,7 @@ def scan(
         categories=category_list,
         config=effective_config,
         quiet=quiet,
+        verify=verify,
     )
 
     # Determine exit code: 0=clean, 1=findings, 2=errors

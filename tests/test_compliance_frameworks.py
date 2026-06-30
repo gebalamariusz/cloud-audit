@@ -15,6 +15,11 @@ FRAMEWORKS_DIR = Path(__file__).parent.parent / "src" / "cloud_audit" / "complia
 
 VALID_CHECKS = {
     "aws-account-001",
+    "aws-dp-001",
+    "aws-dp-002",
+    "aws-dp-003",
+    "aws-dp-004",
+    "aws-dp-005",
     "aws-iam-001",
     "aws-iam-002",
     "aws-iam-003",

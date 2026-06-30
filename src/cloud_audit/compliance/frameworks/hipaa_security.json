@@ -40,7 +40,12 @@
         "aws-vpc-004",
         "aws-rds-001",
         "aws-s3-001",
-        "aws-ssm-001"
+        "aws-ssm-001",
+        "aws-dp-001",
+        "aws-dp-002",
+        "aws-dp-003",
+        "aws-dp-004",
+        "aws-dp-005"
       ],
       "manual_steps": "Automated checks verify key risk reduction controls: threat detection enabled, no wildcard admin policies, no root access keys, restricted network access (security groups and NACLs), no public databases or storage, instances managed for patching. A documented risk management plan with risk acceptance decisions, compensating controls, and residual risk tracking is required separately.",
       "evidence_template": "Risk management controls were verified: GuardDuty active, Security Hub active, admin privilege restrictions, root key restrictions, network access controls (SGs and NACLs), database and storage exposure controls, SSM patch management. {pass_count}/{total_count} check(s) passed. {findings_summary}"
@@ -490,7 +495,12 @@
         "aws-s3-001",
         "aws-lambda-001",
         "aws-ec2-001",
-        "aws-ec2-004"
+        "aws-ec2-004",
+        "aws-dp-001",
+        "aws-dp-002",
+        "aws-dp-003",
+        "aws-dp-004",
+        "aws-dp-005"
       ],
       "manual_steps": "",
       "evidence_template": "Access controls were verified: root and user MFA enforcement, password policy, no wildcard admin policies, OIDC trust restrictions, no root access keys, group-based permissions, hardware MFA for root, EC2 IAM roles, network access restrictions (SGs and NACLs), VPC subnet isolation (public/private separation), IMDSv2 enforcement, no public databases/storage/Lambda/AMIs. {pass_count}/{total_count} check(s) passed. {findings_summary}"

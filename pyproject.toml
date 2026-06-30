@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cloud-audit"
-version = "2.3.1"
-description = "Open-source AWS security scanner. 99 checks across 24 services. Blast Radius CLI, Threat Feed v1, DynamoDB hygiene (encryption/PITR/autoscaling), opinionated Config checks, smart S3 lifecycle, 64 IAM escalation methods, What-If simulator, AI-SPM (Bedrock/SageMaker), 6 compliance frameworks, 31 attack chain rules, breach cost estimation, MCP server. CLI + Terraform remediation for every finding."
+version = "2.4.0"
+description = "Open-source, read-only AWS security scanner. 110 checks across 25 services, 31 attack-chain rules, 64 IAM escalation methods (incl. lateral AssumeRole graph), Proof Mode exploitability verification, data perimeter and Bedrock AgentCore checks, Blast Radius CLI, Threat Feed, What-If simulator, AI-SPM, 6 compliance frameworks, breach-cost estimation, MCP server. CLI + Terraform remediation on every finding."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"

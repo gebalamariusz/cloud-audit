@@ -730,7 +730,12 @@
         "aws-lambda-001",
         "aws-ec2-001",
         "aws-iam-010",
-        "aws-iam-012"
+        "aws-iam-012",
+        "aws-dp-001",
+        "aws-dp-002",
+        "aws-dp-003",
+        "aws-dp-004",
+        "aws-dp-005"
       ],
       "manual_steps": "",
       "evidence_template": "Information access restrictions were verified: no public S3 buckets, no public RDS instances, no public Lambda function URLs, no public AMIs, group-based IAM permissions, Access Analyzer for external access review. {pass_count}/{total_count} check(s) passed. {findings_summary}"
@@ -864,7 +869,12 @@
         "aws-rds-001",
         "aws-lambda-001",
         "aws-ec2-001",
-        "aws-lambda-003"
+        "aws-lambda-003",
+        "aws-dp-001",
+        "aws-dp-002",
+        "aws-dp-003",
+        "aws-dp-004",
+        "aws-dp-005"
       ],
       "manual_steps": "",
       "evidence_template": "Data leakage prevention was verified: no public S3 buckets, S3 access logging enabled, S3 HTTPS enforced, no public RDS instances, no public Lambda URLs, no public AMIs, no secrets in Lambda environment variables. {pass_count}/{total_count} check(s) passed. {findings_summary}"

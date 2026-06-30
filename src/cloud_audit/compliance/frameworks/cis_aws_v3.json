@@ -301,7 +301,12 @@
       "assessment": "Automated",
       "description": "All four S3 Block Public Access settings should be enabled to prevent unintended public access to bucket contents.",
       "checks": [
-        "aws-s3-001"
+        "aws-s3-001",
+        "aws-dp-001",
+        "aws-dp-002",
+        "aws-dp-003",
+        "aws-dp-004",
+        "aws-dp-005"
       ],
       "manual_steps": "",
       "evidence_template": "S3 Block Public Access settings were verified via GetPublicAccessBlock (account and bucket level). {pass_count}/{total_count} check(s) passed. {findings_summary}"

@@ -794,7 +794,12 @@
         "aws-s3-001",
         "aws-rds-001",
         "aws-lambda-001",
-        "aws-ecs-003"
+        "aws-ecs-003",
+        "aws-dp-001",
+        "aws-dp-002",
+        "aws-dp-003",
+        "aws-dp-004",
+        "aws-dp-005"
       ],
       "manual_steps": "",
       "evidence_template": "Information access restrictions verified: S3 public access blocked, RDS public access restricted, Lambda function URL access checked, ECS Exec access controlled. {pass_count}/{total_count} check(s) passed. {findings_summary}"

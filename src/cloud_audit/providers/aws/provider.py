@@ -11,11 +11,13 @@ from botocore.config import Config
 from cloud_audit.providers.aws import threat_feed
 from cloud_audit.providers.aws.checks import (
     account,
+    agentcore,
     backup,
     bedrock,
     cloudtrail,
     cloudwatch,
     config_,
+    data_perimeter,
     ddb,
     ec2,
     ecs,
@@ -68,6 +70,8 @@ _CHECK_MODULES = [
     bedrock,
     sagemaker,
     ddb,
+    data_perimeter,
+    agentcore,
     threat_feed,
 ]
 

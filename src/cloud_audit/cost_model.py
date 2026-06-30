@@ -53,6 +53,11 @@ _CIS_AWS = "https://www.cisecurity.org/benchmark/amazon_web_services"
 _NIST_URL = "https://pages.nist.gov/800-63-3/sp800-63b.html"
 _MITRE_CLOUD = "https://attack.mitre.org/matrices/enterprise/cloud/"
 _OWASP_URL = "https://owasp.org/www-project-top-ten/"
+_AWS_DATA_PERIMETER = (
+    "https://docs.aws.amazon.com/whitepapers/latest/building-a-data-perimeter-on-aws/perimeter-overview.html"
+)
+_UNIT42_AGENTCORE = "https://unit42.paloaltonetworks.com/exploit-of-aws-agentcore-iam-god-mode/"
+_AWS_CONFUSED_DEPUTY = "https://docs.aws.amazon.com/IAM/latest/UserGuide/confused-deputy.html"
 
 _COST_TABLE: dict[str, tuple[int, int, str, str]] = {
     # IAM - credential/access risks
@@ -379,6 +384,90 @@ _COST_TABLE: dict[str, tuple[int, int, str, str]] = {
         100_000,
         "Without a root usage alarm, root account activity goes completely unnoticed. Root should be used only for account-level tasks.",
         _CIS_AWS,
+    ),
+    # Data perimeter - resource policy boundary
+    "aws-dp-001": (
+        25_000,
+        500_000,
+        "An S3 bucket policy granting cross-account or wildcard access without an organization-boundary "
+        "condition is a direct data-exfiltration path. Capital One's attacker reached 100M+ records via "
+        "cross-account access; the OCC levied an $80M fine (2020).",
+        _CAPITAL_ONE_OCC,
+    ),
+    "aws-dp-002": (
+        5_000,
+        50_000,
+        "An SNS topic policy without a data-perimeter condition can leak messages cross-account or be "
+        "coerced via the confused deputy problem. The AWS data perimeter whitepaper recommends "
+        "aws:PrincipalOrgID / aws:SourceArn / aws:SourceAccount guardrails (see source).",
+        _AWS_DATA_PERIMETER,
+    ),
+    "aws-dp-003": (
+        5_000,
+        50_000,
+        "An SQS queue policy without a data-perimeter condition can expose queued data to external "
+        "accounts. The AWS data perimeter whitepaper recommends organization-boundary conditions (see source).",
+        _AWS_DATA_PERIMETER,
+    ),
+    "aws-dp-004": (
+        25_000,
+        500_000,
+        "A Secrets Manager resource policy open to external or wildcard principals is a direct "
+        "credential-exfiltration path. IBM Cost of a Data Breach 2024 puts the average breach at $4.88M.",
+        _IBM_BREACH,
+    ),
+    "aws-dp-005": (
+        10_000,
+        100_000,
+        "A Lambda resource policy granting a service principal without aws:SourceAccount / aws:SourceArn "
+        "enables the confused deputy problem: a service acting for another account can be coerced into "
+        "invoking the function. AWS recommends source-scoping conditions for service principals (see source).",
+        _AWS_CONFUSED_DEPUTY,
+    ),
+    # AgentCore - AI agent platform attack surface (Unit 42 "Cracks in the Bedrock", 2026)
+    "aws-agc-001": (
+        10_000,
+        100_000,
+        "An AgentCore Code Interpreter in PUBLIC network mode gives an attacker-influenced or prompt-injected "
+        "sandbox unrestricted internet egress for data exfiltration. Unit 42 documented sandbox isolation "
+        "bypass on this surface.",
+        _UNIT42_AGENTCORE,
+    ),
+    "aws-agc-002": (
+        10_000,
+        100_000,
+        "An AgentCore Runtime in PUBLIC network mode lets a compromised or prompt-injected agent exfiltrate "
+        "data to external infrastructure instead of being confined to a controlled VPC egress path.",
+        _UNIT42_AGENTCORE,
+    ),
+    "aws-agc-003": (
+        25_000,
+        500_000,
+        "An AgentCore Runtime that does not enforce MMDSv2 is exposed to SSRF / prompt-injection credential "
+        "theft from the metadata endpoint, enabling takeover of the runtime's IAM role - the same risk class "
+        "IMDSv2 addresses on EC2.",
+        _UNIT42_AGENTCORE,
+    ),
+    "aws-agc-004": (
+        5_000,
+        50_000,
+        "AgentCore Memory without a customer-managed KMS key has no key-level audit trail, rotation, or "
+        "incident-time revocation over persisted conversation context and extracted data.",
+        _UNIT42_AGENTCORE,
+    ),
+    "aws-agc-005": (
+        25_000,
+        500_000,
+        "An AgentCore Gateway with no inbound authorizer exposes its MCP tools and the backing IAM role to "
+        "any caller that can reach the gateway URL.",
+        _UNIT42_AGENTCORE,
+    ),
+    "aws-agc-006": (
+        5_000,
+        50_000,
+        "An AgentCore Gateway without an enforcing Cedar policy engine applies no per-tool authorization; any "
+        "valid caller reaches every target the gateway exposes.",
+        _UNIT42_AGENTCORE,
     ),
 }
 

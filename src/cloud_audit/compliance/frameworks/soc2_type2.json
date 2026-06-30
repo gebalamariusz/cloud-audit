@@ -215,7 +215,12 @@
         "aws-rds-002",
         "aws-efs-001",
         "aws-vpc-002",
-        "aws-vpc-005"
+        "aws-vpc-005",
+        "aws-dp-001",
+        "aws-dp-002",
+        "aws-dp-003",
+        "aws-dp-004",
+        "aws-dp-005"
       ],
       "manual_steps": "",
       "evidence_template": "Technology controls were verified across IAM (MFA, password policy), encryption (KMS rotation, key policies, RDS, EFS), storage (S3 public access blocks, encryption), compute (EBS encryption), and network (security groups, default SG restrictions). {pass_count}/{total_count} check(s) passed. {findings_summary}"
@@ -253,7 +258,12 @@
         "aws-ec2-006",
         "aws-rds-002",
         "aws-efs-001",
-        "aws-ddb-001"
+        "aws-ddb-001",
+        "aws-dp-001",
+        "aws-dp-002",
+        "aws-dp-003",
+        "aws-dp-004",
+        "aws-dp-005"
       ],
       "manual_steps": "",
       "evidence_template": "Logical access security was verified: MFA enforcement (root and IAM users), password policy strength, IAM role session duration limits, KMS key rotation and policies, S3 public access blocks and encryption, EBS/RDS/EFS encryption at rest. {pass_count}/{total_count} check(s) passed. {findings_summary}"
@@ -331,7 +341,12 @@
         "aws-lambda-001",
         "aws-ct-003",
         "aws-s3-001",
-        "aws-waf-001"
+        "aws-waf-001",
+        "aws-dp-001",
+        "aws-dp-002",
+        "aws-dp-003",
+        "aws-dp-004",
+        "aws-dp-005"
       ],
       "manual_steps": "",
       "evidence_template": "Boundary protection was verified: security groups restrict admin ports, NACLs block unrestricted access, default SGs restrict all traffic, default VPC not in use, VPC flow logs enabled, VPC subnet isolation (public/private separation) verified, WAFv2 WebACL exists for web application protection, no public RDS/AMIs/Lambda URLs, CloudTrail S3 bucket not public, S3 public access blocked. {pass_count}/{total_count} check(s) passed. {findings_summary}"
@@ -566,7 +581,12 @@
         "aws-efs-001",
         "aws-kms-001",
         "aws-kms-002",
-        "aws-sm-001"
+        "aws-sm-001",
+        "aws-dp-001",
+        "aws-dp-002",
+        "aws-dp-003",
+        "aws-dp-004",
+        "aws-dp-005"
       ],
       "manual_steps": "",
       "evidence_template": "Confidentiality controls were verified: S3 public access blocked and encryption enabled, RDS/EBS/EFS encryption at rest, KMS key rotation and policies, Secrets Manager rotation. {pass_count}/{total_count} check(s) passed. {findings_summary}"
