@@ -249,3 +249,38 @@ def test_list_checks_runs() -> None:
 def test_list_checks_with_category_filter() -> None:
     result = runner.invoke(app, ["list-checks", "--categories", "security"])
     assert result.exit_code == 0
+
+
+# --- Support line in console summary ---
+
+
+def test_support_line_in_console_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("CLOUD_AUDIT_NO_SUPPORT_LINE", raising=False)
+    p1, p2, p3 = _patch_scan_and_provider(_mock_scan)
+    with p1, p2, p3:
+        result = runner.invoke(app, ["scan"])
+    assert "cloud-audit-support" in result.output
+
+
+def test_support_line_disabled_by_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CLOUD_AUDIT_NO_SUPPORT_LINE", "1")
+    p1, p2, p3 = _patch_scan_and_provider(_mock_scan)
+    with p1, p2, p3:
+        result = runner.invoke(app, ["scan"])
+    assert "cloud-audit-support" not in result.output
+
+
+def test_support_line_absent_when_clean(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("CLOUD_AUDIT_NO_SUPPORT_LINE", raising=False)
+    p1, p2, p3 = _patch_scan_and_provider(_mock_scan_clean)
+    with p1, p2, p3:
+        result = runner.invoke(app, ["scan"])
+    assert "cloud-audit-support" not in result.output
+
+
+def test_support_line_not_in_json_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("CLOUD_AUDIT_NO_SUPPORT_LINE", raising=False)
+    p1, p2, p3 = _patch_scan_and_provider(_mock_scan)
+    with p1, p2, p3:
+        result = runner.invoke(app, ["scan", "--format", "json", "--quiet"])
+    assert "cloud-audit-support" not in result.output

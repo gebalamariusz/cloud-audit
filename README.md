@@ -177,6 +177,17 @@ Configure defaults in `.cloud-audit.yml` (regions, `min_severity`, `exclude_chec
 
 Full documentation at **[haitmg.pl/cloud-audit](https://haitmg.pl/cloud-audit/)**: [getting started](https://haitmg.pl/cloud-audit/getting-started/installation/), [attack chains](https://haitmg.pl/cloud-audit/features/attack-chains/), [IAM escalation](https://haitmg.pl/cloud-audit/features/iam-escalation/), [blast radius](https://haitmg.pl/cloud-audit/features/blast-radius/), [Proof Mode](https://haitmg.pl/cloud-audit/features/proof-mode/), [data perimeter](https://haitmg.pl/cloud-audit/features/data-perimeter/), [AgentCore](https://haitmg.pl/cloud-audit/features/agentcore/), [compliance](https://haitmg.pl/cloud-audit/compliance/overview/), and the [full check reference](https://haitmg.pl/cloud-audit/checks/).
 
+## Commercial Support
+
+cloud-audit is free and stays free. If you want a human on the findings, the author offers professional services:
+
+- **Scanner output review (free)** - send your cloud-audit / Prowler / Security Hub output, get a short written review of what actually matters and what to fix first
+- **AWS security audit** - full account audit with a prioritized report and ready-to-apply fixes
+- **Remediation support** - Terraform and IAM changes, verified against your workloads
+- **Palo Alto VM-Series on AWS** - architecture and security review (GWLB/TGW, HA, routing)
+
+Details: [haitmg.pl/cloud-audit-support](https://haitmg.pl/cloud-audit-support/?utm_source=github&utm_medium=readme) or email [kontakt@haitmg.pl](mailto:kontakt@haitmg.pl).
+
 ## Development
 
 ```bash

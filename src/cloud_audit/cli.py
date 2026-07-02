@@ -346,6 +346,14 @@ def _print_summary(report: ScanReport, suppressed_count: int = 0) -> None:
     elif not s.checks_errored:
         console.print("\n[bold green]No issues found. Your infrastructure looks great![/bold green]")
 
+    # One-line support pointer, console output only (never JSON/SARIF/CI).
+    # Opt out: CLOUD_AUDIT_NO_SUPPORT_LINE=1
+    if findings and not os.environ.get("CLOUD_AUDIT_NO_SUPPORT_LINE"):
+        console.print(
+            "\n[dim]Need help prioritizing or fixing these? Free scanner-output review: "
+            "https://haitmg.pl/cloud-audit-support/?utm_source=cli[/dim]"
+        )
+
 
 EFFORT_COLORS = {
     "low": "green",
