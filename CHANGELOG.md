@@ -57,6 +57,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The MCP SDK dependency is pinned to `mcp>=1.20,<2`. The `mcp` 2.x line
+  (released 2026-07-28) moved `FastMCP` out of `mcp.server.fastmcp`, so a fresh
+  `pip install cloud-audit` resolved to 2.x and `cloud-audit-mcp` failed to
+  import. The 1.x line is still maintained (1.30.0 on 2026-09-07); 2.x support
+  is a follow-up.
 - `simulate` reported relationship-based chains (`AC-01` internet-exposed admin
   instance, `AC-07` OIDC to admin) as broken by any fix, because re-detection
   from findings alone cannot see EC2-to-role and OIDC-to-policy relationships a
