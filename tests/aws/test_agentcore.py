@@ -278,6 +278,65 @@ def test_access_denied_skipped() -> None:
     assert result.findings == []
 
 
+# ---------------------------------------------------------------------------
+# Coverage gaps: an access denial is "not assessed", never a clean pass
+# ---------------------------------------------------------------------------
+
+
+def test_access_denied_on_list_records_coverage_gap() -> None:
+    prov = _FakeProvider(_FakeClient(errors={"list_gateways": _denied("ListGateways")}), regions=("eu-west-1",))
+    result = agentcore.check_gateway_authorizer(prov)
+    assert result.error is None
+    assert result.findings == []
+    assert len(result.coverage_gaps) == 1
+    gap = result.coverage_gaps[0]
+    assert gap.startswith("eu-west-1: ")
+    assert "ListGateways" in gap
+    assert "AccessDeniedException" in gap
+
+
+def test_access_denied_on_get_records_coverage_gap_once() -> None:
+    prov = _FakeProvider(
+        _FakeClient(
+            lists={"list_memories": {"memories": [{"id": "mem-1"}, {"id": "mem-2"}]}},
+            errors={"get_memory": _denied("GetMemory")},
+        )
+    )
+    result = agentcore.check_memory_encryption(prov)
+    assert result.error is None
+    assert result.findings == []
+    # two denied resources in the same region collapse into one gap entry
+    assert len(result.coverage_gaps) == 1
+    assert "GetMemory" in result.coverage_gaps[0]
+
+
+def test_access_denied_gap_per_region() -> None:
+    prov = _FakeProvider(
+        _FakeClient(errors={"list_agent_runtimes": _denied("ListAgentRuntimes")}),
+        regions=("us-east-1", "eu-central-1"),
+    )
+    result = agentcore.check_runtime_public_network(prov)
+    assert [g.split(":")[0] for g in result.coverage_gaps] == ["us-east-1", "eu-central-1"]
+
+
+def test_service_absent_is_not_a_coverage_gap() -> None:
+    """Region without AgentCore (UnrecognizedClient / OptIn / 404) is a silent skip, not a gap."""
+    for code in ("UnrecognizedClientException", "OptInRequired", "404"):
+        err = ClientError({"Error": {"Code": code, "Message": "n/a"}}, "ListGateways")
+        prov = _FakeProvider(_FakeClient(errors={"list_gateways": err}))
+        result = agentcore.check_gateway_authorizer(prov)
+        assert result.error is None, code
+        assert result.coverage_gaps == [], code
+
+
+def test_unexpected_error_still_surfaces_as_error() -> None:
+    err = ClientError({"Error": {"Code": "ThrottlingException", "Message": "slow down"}}, "ListGateways")
+    prov = _FakeProvider(_FakeClient(errors={"list_gateways": err}))
+    result = agentcore.check_gateway_authorizer(prov)
+    assert result.error is not None
+    assert result.coverage_gaps == []
+
+
 def test_not_implemented_skipped() -> None:
     """moto-style '404 / Not yet implemented' (service unsupported here) -> skip, no error."""
     err = ClientError({"Error": {"Code": "404", "Message": "Not yet implemented"}}, "ListCodeInterpreters")

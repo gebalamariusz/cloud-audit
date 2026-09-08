@@ -137,6 +137,8 @@ def _print_summary(report: ScanReport, suppressed_count: int = 0) -> None:
     table.add_row("Checks failed", f"[red]{s.checks_failed}[/red]" if s.checks_failed else "0")
     if s.checks_errored:
         table.add_row("Checks errored", f"[yellow]{s.checks_errored}[/yellow]")
+    if s.coverage_gaps:
+        table.add_row("Coverage gaps", f"[yellow]{s.coverage_gaps}[/yellow]  [dim](access denied, not assessed)[/dim]")
     if s.attack_chains_detected:
         table.add_row("Attack chains", f"[red]{s.attack_chains_detected}[/red]")
     if s.total_risk_exposure and s.total_risk_exposure.high_usd > 0:
@@ -153,6 +155,16 @@ def _print_summary(report: ScanReport, suppressed_count: int = 0) -> None:
         for r in errored_results:
             err_short = (r.error or "Unknown")[:100]
             console.print(f"  [dim]{r.check_name}:[/dim] [yellow]{err_short}[/yellow]")
+
+    # Coverage gaps: the scanner was denied a read. A pass there is not a clean pass.
+    if s.coverage_gaps:
+        console.print(
+            f"\n[yellow]Coverage gaps: {s.coverage_gaps} region/resource read(s) denied to the scanner "
+            f"(not assessed, not passed):[/yellow]"
+        )
+        for r in report.results:
+            for gap in r.coverage_gaps:
+                console.print(f"  [dim]{r.check_id}:[/dim] [yellow]{gap}[/yellow]")
 
     # Attack chains
     if report.attack_chains:
@@ -904,9 +916,35 @@ def show_framework_cmd(
 
 
 @app.command()
-def demo() -> None:
+def demo(
+    save: Annotated[
+        Path | None,
+        typer.Option(
+            "--save",
+            help=(
+                "Also write the sample scan as JSON (built by the real correlation, root-cause, cost and "
+                "graph engines) so you can try blast-radius, agent-blast, simulate and diff without AWS."
+            ),
+        ),
+    ] = None,
+) -> None:
     """Show a demo scan with sample output (no AWS credentials needed)."""
     import time
+
+    from cloud_audit.demo_data import build_demo_report
+
+    if save is not None:
+        try:
+            _safe_write_text(save, build_demo_report().model_dump_json(indent=2))
+        except OSError as exc:
+            console.print(f"[red]Failed to write demo report to {save}: {exc}[/red]")
+            raise typer.Exit(2) from None
+        console.print(f"[green]Wrote sample scan to {save}[/green]")
+        console.print(
+            f"[dim]Try: cloud-audit agent-blast --report {save}   |   "
+            f"cloud-audit blast-radius --report {save} "
+            f"--resource arn:aws:iam::123456789012:role/support-bot-ticket-role[/dim]\n"
+        )
 
     from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
 
@@ -914,161 +952,25 @@ def demo() -> None:
 
     # Simulate progress bar
     with Progress(
-        TextColumn("[bold]Running 80 checks on AWS..."),
+        TextColumn("[bold]Running 110 checks on AWS (sample)..."),
         BarColumn(bar_width=40),
         TextColumn("{task.completed}/{task.total}"),
         TimeElapsedColumn(),
         console=console,
     ) as progress:
-        task = progress.add_task("Scanning", total=80)
-        for _ in range(80):
-            time.sleep(0.04)
+        task = progress.add_task("Scanning", total=110)
+        for _ in range(110):
+            time.sleep(0.02)
             progress.advance(task)
 
-    # Health score
-    console.print()
+    report = build_demo_report()
+    _print_summary(report)
+    _print_remediation(report.all_findings[:2])
     console.print(
-        Panel(
-            "[bold yellow]62[/bold yellow] / 100",
-            title="[bold]Health Score[/bold]",
-            border_style="yellow",
-            width=30,
-        )
-    )
-
-    # Summary table
-    table = Table(show_header=False, box=None, padding=(0, 2))
-    table.add_column(style="dim")
-    table.add_column()
-    table.add_row("Provider", "AWS")
-    table.add_row("Account", "123456789012")
-    table.add_row("Regions", "eu-central-1")
-    table.add_row("Duration", "12s")
-    table.add_row("Resources scanned", "147")
-    table.add_row("Checks passed", "[green]11[/green]")
-    table.add_row("Checks failed", "[red]6[/red]")
-    console.print(table)
-
-    # Attack chains demo
-    demo_chains_table = Table(show_header=False, box=None, padding=(0, 2), show_edge=False)
-    demo_chains_table.add_column(width=10)
-    demo_chains_table.add_column()
-    demo_chains_table.add_row(
-        "[bold red]CRITICAL[/bold red]",
-        "[bold]Internet-Exposed Admin Instance[/bold]",
-    )
-    demo_chains_table.add_row("", "[dim]i-0abc123def456789[/dim]")
-    demo_chains_table.add_row(
-        "",
-        "[italic]Attacker lands on EC2 via public SG, queries IMDS for admin role credentials[/italic]",
-    )
-    demo_chains_table.add_row("", "Fix: Close security group ingress (effort: LOW)")
-    demo_chains_table.add_row("", "")
-    demo_chains_table.add_row(
-        "[bold red]CRITICAL[/bold red]",
-        "[bold]CI/CD to Admin Takeover[/bold]",
-    )
-    demo_chains_table.add_row("", "[dim]github-deploy-role[/dim]")
-    demo_chains_table.add_row(
-        "",
-        "[italic]Any GitHub repo assumes deploy role via OIDC without sub condition, gets admin[/italic]",
-    )
-    demo_chains_table.add_row("", "Fix: Add sub condition to OIDC trust policy (effort: LOW)")
-    console.print(
-        Panel(
-            demo_chains_table,
-            title="[bold]Attack Chains (2 detected)[/bold]",
-            border_style="red",
-            width=80,
-        )
-    )
-
-    # Findings by severity
-    console.print("\n[bold]Findings by severity:[/bold]")
-    console.print("  [bold red]x CRITICAL: 2[/bold red]")
-    console.print("  [red]x HIGH: 4[/red]")
-    console.print("  [yellow]! MEDIUM: 7[/yellow]")
-    console.print("  [cyan]o LOW: 3[/cyan]")
-
-    # Top findings
-    console.print("\n[bold]Top findings (5 of 16):[/bold]\n")
-
-    ft = Table(box=None, padding=(0, 1), show_header=True, header_style="bold")
-    ft.add_column("Sev", width=8)
-    ft.add_column("Region", width=14)
-    ft.add_column("Check")
-    ft.add_column("Resource")
-    ft.add_column("Title", max_width=55)
-    ft.add_row(
-        "[bold red]CRITICAL[/bold red]",
-        "[dim]global[/dim]",
-        "aws-iam-001",
-        "arn:aws:iam::1234...:root",
-        "Root account without MFA enabled",
-    )
-    ft.add_row(
-        "[bold red]CRITICAL[/bold red]",
-        "[dim]eu-central-1[/dim]",
-        "aws-vpc-002",
-        "sg-0a1b2c3d4e5f67890",
-        "SG open to 0.0.0.0/0 on port 22",
-    )
-    ft.add_row(
-        "[red]HIGH[/red]",
-        "[dim]eu-central-1[/dim]",
-        "aws-rds-001",
-        "production-db",
-        "RDS instance is publicly accessible",
-    )
-    ft.add_row(
-        "[red]HIGH[/red]",
-        "[dim]global[/dim]",
-        "aws-s3-001",
-        "company-backups-2024",
-        "S3 public access block disabled",
-    )
-    ft.add_row(
-        "[yellow]MEDIUM[/yellow]",
-        "[dim]global[/dim]",
-        "aws-iam-003",
-        "deploy-key-AKIA...",
-        "Access key 347 days old (limit: 90)",
-    )
-    console.print(ft)
-
-    console.print("\n  [dim]... and 11 more. See full report for details.[/dim]")
-
-    # Remediation preview
-    console.print("\n[bold]Remediation details (2 of 6 actionable findings):[/bold]\n")
-
-    console.print("  [bold red]CRITICAL[/bold red]  Root account without MFA enabled")
-    console.print("  [dim]Resource:[/dim]   arn:aws:iam::123456789012:root")
-    console.print("  [dim]Compliance:[/dim] CIS 1.5")
-    console.print("  [dim]Effort:[/dim]     [green]LOW[/green]")
-    mfa_cli = "aws iam create-virtual-mfa-device --virtual-mfa-device-name root-mfa"
-    console.print(f"  [dim]CLI:[/dim]        [cyan]{mfa_cli}[/cyan]")
-    console.print('  [dim]Terraform:[/dim]  resource "aws_iam_virtual_mfa_device" "root" { ... }')
-    mfa_docs = "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_mfa_enable_virtual.html"
-    console.print(f"  [dim]Docs:[/dim]       {mfa_docs}")
-    console.print()
-
-    console.print("  [bold red]CRITICAL[/bold red]  Security group open to 0.0.0.0/0 on port 22")
-    console.print("  [dim]Resource:[/dim]   sg-0a1b2c3d4e5f67890")
-    console.print("  [dim]Compliance:[/dim] CIS 5.2")
-    console.print("  [dim]Effort:[/dim]     [green]LOW[/green]")
-    sg_cli = (
-        "aws ec2 revoke-security-group-ingress"
-        " --group-id sg-0a1b2c3d4e5f67890"
-        " --protocol tcp --port 22 --cidr 0.0.0.0/0"
-    )
-    console.print(f"  [dim]CLI:[/dim]        [cyan]{sg_cli}[/cyan]")
-    console.print('  [dim]Terraform:[/dim]  resource "aws_security_group_rule" "ssh" { ... }')
-    sg_docs = "https://docs.aws.amazon.com/vpc/latest/userguide/security-group-rules.html"
-    console.print(f"  [dim]Docs:[/dim]       {sg_docs}")
-    console.print()
-
-    console.print(
-        "[dim]This is sample output. Run [bold]cloud-audit scan[/bold] with AWS credentials for a real scan.[/dim]"
+        "[dim]Sample account. The chains, root causes, costs and graph above come from the real engines; "
+        "only the findings are invented. Run [bold]cloud-audit scan[/bold] with AWS credentials for a real scan, "
+        "or [bold]cloud-audit demo --save demo.json[/bold] to try blast-radius, agent-blast, simulate and diff "
+        "offline.[/dim]"
     )
 
 
@@ -1941,6 +1843,168 @@ def _md_escape(text: object) -> str:
         .replace("<", "&lt;")
         .replace(">", "&gt;")
     )
+
+
+@app.command(name="agent-blast")
+def agent_blast_cmd(
+    agent: Annotated[
+        str | None,
+        typer.Option("--agent", "-a", help="Agent name, id or ARN (substring works). Default: every agent in the scan"),
+    ] = None,
+    report_file: Annotated[
+        Path | None,
+        typer.Option("--report", help="Path to JSON scan report (defaults to last scan in ~/.cloud-audit/)"),
+    ] = None,
+    output_format: Annotated[
+        str,
+        typer.Option("--format", "-f", help="Output format: tree (default), json, markdown"),
+    ] = "tree",
+    output_path: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Write output to file instead of stdout"),
+    ] = None,
+    verify: Annotated[
+        bool,
+        typer.Option(
+            "--verify",
+            help=(
+                "Proof Mode: ask the read-only IAM policy simulator about every concrete reach and every "
+                "escalation path of the agent's identities (adds IAM API calls, no charge)."
+            ),
+        ),
+    ] = False,
+    profile: Annotated[str | None, typer.Option("--profile", help="AWS profile used by --verify")] = None,
+    max_depth: Annotated[int, typer.Option("--max-depth", help="Maximum BFS depth per identity (default: 5)")] = 5,
+    max_nodes: Annotated[int, typer.Option("--max-nodes", help="Maximum nodes per identity graph (default: 50)")] = 50,
+    demo_mode: Annotated[
+        bool,
+        typer.Option("--demo", help="Run on the built-in sample scan (no AWS credentials, no saved scan needed)"),
+    ] = False,
+) -> None:
+    """What can a hijacked AI agent reach in this account, and can you prove it?
+
+    Reads the agents discovered by 'cloud-audit scan' (Bedrock Agents, AgentCore
+    runtimes, gateways, sandboxes) and answers under two threat models: identity
+    takeover (the attacker holds the agent role's credentials) and behaviour
+    takeover (prompt injection steering the agent's tools, bounded by the tools'
+    own execution roles). Pure in-memory analysis of the saved scan.
+    With --verify, every concrete reach is checked against the read-only IAM
+    policy simulator (simulated, not executed).
+    """
+    from cloud_audit.agent_blast import (
+        compute_agent_blast,
+        find_agent,
+        to_markdown,
+        to_tree,
+        verify_report_agents,
+    )
+
+    if demo_mode:
+        from cloud_audit.demo_data import build_demo_report
+
+        report = build_demo_report()
+        if verify:
+            console.print(
+                "[yellow]--verify is ignored with --demo: the sample identities do not exist in AWS.[/yellow]"
+            )
+            verify = False
+    elif report_file:
+        if not report_file.exists():
+            console.print(f"[red]Report file not found: {report_file}[/red]")
+            raise typer.Exit(2)
+        try:
+            report = ScanReport.model_validate_json(report_file.read_text(encoding="utf-8"))
+        except Exception as e:
+            console.print(f"[red]Failed to parse report: {e}[/red]")
+            raise typer.Exit(2) from None
+    else:
+        loaded = _load_last_report()
+        if loaded is None:
+            console.print("[red]No saved scan found. Run 'cloud-audit scan' first, or use --report PATH.[/red]")
+            raise typer.Exit(2)
+        report = loaded
+
+    fmt = output_format.lower().strip()
+    if fmt not in {"tree", "json", "markdown"}:
+        console.print(f"[red]Unknown format: {output_format}. Use tree, json, or markdown.[/red]")
+        raise typer.Exit(2)
+    if fmt == "tree" and output_path is not None:
+        console.print("[red]--output is not supported with --format tree. Use --format json or markdown.[/red]")
+        raise typer.Exit(2)
+    if max_depth < 1 or max_nodes < 1:
+        console.print("[red]--max-depth and --max-nodes must be >= 1.[/red]")
+        raise typer.Exit(2)
+
+    if not report.agents:
+        gaps = report.agent_inventory_gaps
+        if gaps:
+            console.print("[yellow]No AI agents in this scan, but the inventory was denied a read:[/yellow]")
+            for g in gaps:
+                console.print(f"  [yellow]{rich_escape(g)}[/yellow]")
+        else:
+            console.print(
+                "[yellow]No AI agents (Bedrock Agents / AgentCore) in this scan. "
+                "Scans from cloud-audit < 2.5 carry no agent inventory; re-run 'cloud-audit scan'.[/yellow]"
+            )
+        raise typer.Exit(1)
+
+    targets = report.agents if agent is None else find_agent(report, agent)
+    if not targets:
+        names = ", ".join(sorted({a.name for a in report.agents}))
+        console.print(f"[red]No agent matches '{rich_escape(agent or '')}'. Available: {rich_escape(names)}[/red]")
+        raise typer.Exit(2)
+
+    results = [compute_agent_blast(report, a, max_depth=max_depth, max_nodes=max_nodes) for a in targets]
+
+    if verify:
+        from cloud_audit.proof import make_simulate_fn
+        from cloud_audit.providers.aws import AWSProvider
+
+        try:
+            region = next((a.region for a in targets if a.region), None)
+            provider = AWSProvider(profile=profile, regions=[region] if region else None)
+            allowed = verify_report_agents(report, results, make_simulate_fn(provider))
+        except Exception as e:
+            console.print(f"[red]Proof Mode unavailable: {rich_escape(str(e))}[/red]")
+            raise typer.Exit(2) from None
+        if fmt == "tree":
+            console.print(
+                f"[bold]Proof Mode: {allowed} reach(es) allowed by the IAM policy simulator "
+                f"(simulated, not executed)[/bold]\n"
+            )
+
+    if fmt == "json":
+        import json as _json
+
+        payload = _json.dumps([r.model_dump(mode="json") for r in results], indent=2)
+        if output_path:
+            try:
+                _safe_write_text(output_path, payload)
+            except OSError as exc:
+                console.print(f"[red]Failed to write agent-blast JSON to {output_path}: {exc}[/red]")
+                raise typer.Exit(2) from None
+            console.print(f"[green]Wrote agent-blast JSON to {output_path}[/green]")
+        else:
+            # Plain stdout: Rich would soft-wrap long ARNs and corrupt the JSON.
+            typer.echo(payload)
+        return
+
+    if fmt == "markdown":
+        md = "\n\n".join(to_markdown(r) for r in results)
+        if output_path:
+            try:
+                _safe_write_text(output_path, md)
+            except OSError as exc:
+                console.print(f"[red]Failed to write agent-blast Markdown to {output_path}: {exc}[/red]")
+                raise typer.Exit(2) from None
+            console.print(f"[green]Wrote agent-blast Markdown to {output_path}[/green]")
+        else:
+            typer.echo(md)
+        return
+
+    for r in results:
+        console.print(to_tree(r))
+        console.print()
 
 
 def _blast_radius_to_markdown(result: object) -> str:

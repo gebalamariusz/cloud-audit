@@ -1,6 +1,6 @@
 # SOC 2 Type II - Trust Services Criteria
 
-cloud-audit maps 88 of 94 checks to 43 SOC 2 Trust Services Criteria (AICPA 2017, revised 2022). 24 criteria are automated, 19 require manual review (organizational, procedural, and governance controls).
+cloud-audit maps its checks to 43 SOC 2 Trust Services Criteria (AICPA 2017, revised 2022). 24 criteria are automated or partially automated; 19 require manual review (organizational, procedural, and governance controls).
 
 !!! note "Readiness assessment, not certification"
     SOC 2 compliance requires a formal audit by an AICPA-licensed CPA firm. This tool automates assessment of technical infrastructure controls and generates evidence to support your audit preparation.

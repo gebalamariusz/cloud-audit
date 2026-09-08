@@ -10,7 +10,7 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, Field, field_validator
 
-from cloud_audit.models import Severity  # noqa: TC001 -- needed at runtime by Pydantic
+from cloud_audit.models import Severity
 
 _VALID_KEYS = {
     "provider",

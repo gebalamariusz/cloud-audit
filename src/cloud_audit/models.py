@@ -94,6 +94,13 @@ class CheckResult(BaseModel):
     findings: list[Finding] = Field(default_factory=list)
     resources_scanned: int = 0
     error: str | None = None
+    coverage_gaps: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Regions or resources the check could not read (typically AccessDenied for the scanner's "
+            "own credentials). A check with gaps and no findings is 'not assessed there', not a clean pass."
+        ),
+    )
 
 
 VizNodeType = Literal["internet", "compute", "identity", "network", "storage", "finding", "impact"]
@@ -163,6 +170,75 @@ class EscalationPath(BaseModel):
     )
 
 
+class AgentTool(BaseModel):
+    """A capability an AI agent can invoke, and the IAM identity that capability runs as."""
+
+    name: str = Field(description="Tool / action group / gateway target name")
+    kind: str = Field(
+        description=(
+            "action_group_lambda | action_group_custom_control | knowledge_base | "
+            "gateway_target_lambda | gateway_target_openapi | gateway_target_mcp_server | "
+            "gateway_target_api_gateway | gateway_target_smithy"
+        )
+    )
+    target_arn: str = Field(default="", description="ARN of the backend (Lambda, Knowledge Base, ...) when known")
+    execution_role_arn: str = Field(
+        default="",
+        description="IAM role the backend executes as. Empty when unknown or when the backend is not IAM-bound.",
+    )
+    region: str = ""
+    detail: str = Field(default="", description="Short evidence note, e.g. schema size or credential provider type")
+
+
+class AgentIdentity(BaseModel):
+    """An AI agent (or agent sandbox) deployed in the account and the IAM identities it acts through.
+
+    ``principal_arns`` are the roles the agent itself runs as. ``tools`` carry their
+    own execution roles. A hijacked agent acts with the union of both: the full role
+    on identity takeover, the tools' roles on behaviour takeover (prompt injection).
+    """
+
+    agent_id: str
+    name: str
+    kind: str = Field(
+        description=(
+            "bedrock_agent | agentcore_runtime | agentcore_gateway | agentcore_code_interpreter | agentcore_browser"
+        )
+    )
+    arn: str = ""
+    region: str = ""
+    principal_arns: list[str] = Field(default_factory=list, description="IAM roles the agent runs as")
+    tools: list[AgentTool] = Field(default_factory=list)
+    data_sources: list[str] = Field(
+        default_factory=list, description="Data the agent is wired to read, e.g. S3 bucket ARNs behind Knowledge Bases"
+    )
+    foundation_model: str = ""
+    guardrail_attached: bool | None = Field(default=None, description="None when the resource type has no guardrail")
+    notes: list[str] = Field(
+        default_factory=list, description="Config facts relevant to blast radius, e.g. network mode"
+    )
+
+
+class PolicyGrant(BaseModel):
+    """One (action, resource) fragment of a principal's IAM policy, as written.
+
+    Kept deliberately raw: patterns are not expanded and conditions are not
+    evaluated (flagged only). The IAM policy simulator, not this model, decides
+    the effective outcome; see ``proof.verify_resource_access``. ``NotAction`` /
+    ``NotResource`` statements are recorded as one grant per resource with the
+    listed patterns joined after a ``NotAction:`` / ``NotResource:`` prefix and the
+    matching flag set, so consumers cannot mistake "everything except X" for "X".
+    """
+
+    action: str = Field(description="Action pattern as written, e.g. 's3:GetObject', 's3:*', '*'")
+    resource: str = Field(description="Resource pattern as written, e.g. '*' or an ARN with wildcards")
+    effect: str = Field(description="'Allow' or 'Deny'")
+    has_condition: bool = False
+    not_action: bool = False
+    not_resource: bool = False
+    source: str = Field(default="", description="Where it came from: inline:<name>, managed:<arn>, group:<name>/...")
+
+
 class RootCauseFix(BaseModel):
     """A single root-cause fix that breaks multiple attack chains."""
 
@@ -181,12 +257,16 @@ class ScanSummary(BaseModel):
     total_findings: int = 0
     attack_chains_detected: int = 0
     escalation_paths_detected: int = 0
+    agents_discovered: int = 0
     by_severity: dict[Severity, int] = Field(default_factory=dict)
     by_category: dict[Category, int] = Field(default_factory=dict)
     resources_scanned: int = 0
     checks_passed: int = 0
     checks_failed: int = 0
     checks_errored: int = 0
+    coverage_gaps: int = Field(
+        default=0, description="Total region/resource reads denied to the scanner (see CheckResult.coverage_gaps)"
+    )
     score: int = Field(default=100, description="Overall health score 0-100")
     total_risk_exposure: CostEstimateData | None = Field(default=None, description="Aggregate risk exposure estimate")
 
@@ -204,6 +284,21 @@ class ScanReport(BaseModel):
     attack_chains: list[AttackChain] = Field(default_factory=list)
     root_causes: list[RootCauseFix] = Field(default_factory=list)
     escalation_paths: list[EscalationPath] = Field(default_factory=list)
+    agents: list[AgentIdentity] = Field(
+        default_factory=list,
+        description="AI agents and agent sandboxes discovered (Bedrock Agents, AgentCore) with their IAM identities",
+    )
+    agent_inventory_gaps: list[str] = Field(
+        default_factory=list,
+        description="Regions where the agent inventory was denied a read (not assessed there)",
+    )
+    principal_grants: dict[str, list[PolicyGrant]] = Field(
+        default_factory=dict,
+        description=(
+            "Raw policy statements per IAM principal, collected only for AI agent identities and their tools' "
+            "execution roles (bounded by design). Feeds agent-blast data reach; conditions are flagged, not evaluated."
+        ),
+    )
     # Security graph (v3.0.0+) - SecurityGraph.to_dict() output, or None for
     # older scans that predate the backbone. Kept as a plain dict so consumers
     # can round-trip the report without importing the graph module.
@@ -225,6 +320,8 @@ class ScanReport(BaseModel):
         self.summary.checks_passed = sum(1 for r in self.results if not r.findings and not r.error)
         self.summary.checks_failed = sum(1 for r in self.results if r.findings)
         self.summary.checks_errored = sum(1 for r in self.results if r.error)
+        self.summary.coverage_gaps = sum(len(r.coverage_gaps) for r in self.results) + len(self.agent_inventory_gaps)
+        self.summary.agents_discovered = len(self.agents)
 
         # Single pass over findings for severity, category counts and penalty
         sev_counts: dict[Severity, int] = {}

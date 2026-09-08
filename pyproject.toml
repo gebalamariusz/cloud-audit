@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cloud-audit"
-version = "2.4.0"
+version = "2.5.0"
 description = "Open-source, read-only AWS security scanner. 110 checks across 25 services, 31 attack-chain rules, 64 IAM escalation methods (incl. lateral AssumeRole graph), Proof Mode exploitability verification, data perimeter and Bedrock AgentCore checks, Blast Radius CLI, Threat Feed, What-If simulator, AI-SPM, 6 compliance frameworks, breach-cost estimation, MCP server. CLI + Terraform remediation on every finding."
 readme = "README.md"
 license = "MIT"
@@ -94,6 +94,11 @@ select = ["E", "F", "I", "N", "W", "UP", "S", "B", "A", "C4", "SIM", "TCH", "RUF
 "src/cloud_audit/providers/aws/threat_feed/*.py" = ["N803", "N818", "RUF013", "E501", "S112"]
 "tests/aws/threat_feed/*.py" = ["S101", "N803", "N806", "N818", "RUF013", "E501", "TC003", "E402"]
 "tests/**" = ["S101", "TC003", "E402"]
+
+# Pydantic resolves field annotations at import time, so model types must stay
+# runtime imports even under `from __future__ import annotations`.
+[tool.ruff.lint.flake8-type-checking]
+runtime-evaluated-base-classes = ["pydantic.BaseModel"]
 
 [tool.mypy]
 python_version = "3.10"

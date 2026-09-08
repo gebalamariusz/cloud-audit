@@ -102,14 +102,12 @@ def simulate_fix(report: ScanReport, check_ids: list[str]) -> SimulationResult:
             )
         )
 
-    # Recompute attack chains on reduced findings
-    try:
-        from cloud_audit.correlate import detect_attack_chains
-
-        # No relationship data needed for re-detection — use findings-only mode
-        after_chains = detect_attack_chains(reduced_findings, None)
-    except Exception:
-        after_chains = []
+    # A chain survives the fix only if none of its component findings was fixed.
+    # Chains are monotonic in findings (removing findings never creates a chain),
+    # and the relationship-based rules (EC2 -> admin role, OIDC -> admin policy)
+    # need live AWS data a saved scan does not carry, so re-detecting from findings
+    # alone would silently drop them and report a fix as more effective than it is.
+    after_chains = [c for c in report.attack_chains if not any(f.check_id in check_id_set for f in c.findings)]
 
     # Compute after score
     penalty = sum(SEVERITY_WEIGHT.get(f.severity, 0) for f in reduced_findings)

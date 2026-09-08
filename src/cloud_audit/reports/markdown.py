@@ -46,6 +46,8 @@ def generate_markdown(report: ScanReport) -> str:
     lines.append(f"| Checks failed | {s.checks_failed} |")
     if s.checks_errored:
         lines.append(f"| Checks errored | {s.checks_errored} |")
+    if s.coverage_gaps:
+        lines.append(f"| Coverage gaps (reads denied, not assessed) | {s.coverage_gaps} |")
     lines.append(f"| Total findings | {s.total_findings} |")
     lines.append("")
 

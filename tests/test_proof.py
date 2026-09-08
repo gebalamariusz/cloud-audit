@@ -13,11 +13,13 @@ from typing import Any
 
 from cloud_audit.models import EscalationCategory, EscalationPath, Severity
 from cloud_audit.proof import (
+    ATTACKER_CONTEXT_ENTRIES,
     _evaluate_simulation,
     _verify_one,
     make_simulate_fn,
     verify_escalation_paths,
     verify_report_escalations,
+    verify_resource_access,
 )
 
 OWN = "123456789012"
@@ -296,3 +298,241 @@ def test_escalation_path_defaults_verified_none() -> None:
     p = _path()
     assert p.verified is None
     assert p.verification_detail == ""
+
+
+# ---------------------------------------------------------------------------
+# verify_resource_access - per-resource simulation (ResourceArns + ContextEntries)
+# ---------------------------------------------------------------------------
+
+ROLE = f"arn:aws:iam::{OWN}:role/agent-exec"
+BUCKET_A = "arn:aws:s3:::kb-docs/*"
+BUCKET_B = "arn:aws:s3:::hr-files/*"
+
+
+def _per_resource(
+    action: str, decisions: dict[str, str], missing: dict[str, list[str]] | None = None
+) -> list[dict[str, Any]]:
+    """Response shape 1: one EvaluationResult per (action, resource) with EvalResourceName."""
+    out: list[dict[str, Any]] = []
+    for arn, decision in decisions.items():
+        entry: dict[str, Any] = {"EvalActionName": action, "EvalDecision": decision, "EvalResourceName": arn}
+        if missing and arn in missing:
+            entry["MissingContextValues"] = missing[arn]
+        out.append(entry)
+    return out
+
+
+class _RecordingSimulate:
+    """Fake SimulateFn that records how it was called and returns canned results."""
+
+    def __init__(self, results: list[dict[str, Any]] | Exception) -> None:
+        self.results = results
+        self.calls: list[dict[str, Any]] = []
+
+    def __call__(
+        self,
+        principal_arn: str,
+        action_names: list[str],
+        resource_arns: list[str] | None = None,
+        context_entries: list[dict[str, Any]] | None = None,
+    ) -> list[dict[str, Any]]:
+        self.calls.append(
+            {
+                "principal": principal_arn,
+                "actions": action_names,
+                "resource_arns": resource_arns,
+                "context_entries": context_entries,
+            }
+        )
+        if isinstance(self.results, Exception):
+            raise self.results
+        return self.results
+
+
+def test_verify_resource_access_allowed_and_denied_per_resource() -> None:
+    sim = _RecordingSimulate(_per_resource("s3:GetObject", {BUCKET_A: "allowed", BUCKET_B: "implicitDeny"}))
+    proofs = verify_resource_access(ROLE, "s3:GetObject", [BUCKET_A, BUCKET_B], sim)
+    assert [p.resource_arn for p in proofs] == [BUCKET_A, BUCKET_B]
+    assert proofs[0].allowed is True
+    assert "not executed" in proofs[0].detail
+    assert "resource-based policy" in proofs[0].detail
+    assert proofs[1].allowed is False
+    assert proofs[1].decision == "implicitDeny"
+    # single API call for the whole list, resources + action passed through
+    assert len(sim.calls) == 1
+    assert sim.calls[0]["actions"] == ["s3:GetObject"]
+    assert sim.calls[0]["resource_arns"] == [BUCKET_A, BUCKET_B]
+
+
+def test_verify_resource_access_resource_specific_results_shape() -> None:
+    """Response shape 2: one EvaluationResult per action carrying ResourceSpecificResults."""
+    results = [
+        {
+            "EvalActionName": "sts:AssumeRole",
+            "EvalDecision": "allowed",
+            "ResourceSpecificResults": [
+                {"EvalResourceName": "arn:aws:iam::123456789012:role/a", "EvalResourceDecision": "allowed"},
+                {"EvalResourceName": "arn:aws:iam::123456789012:role/b", "EvalResourceDecision": "explicitDeny"},
+            ],
+        }
+    ]
+    sim = _RecordingSimulate(results)
+    proofs = verify_resource_access(
+        ROLE, "sts:AssumeRole", ["arn:aws:iam::123456789012:role/a", "arn:aws:iam::123456789012:role/b"], sim
+    )
+    assert proofs[0].allowed is True
+    assert proofs[1].allowed is False
+    assert proofs[1].decision == "explicitDeny"
+
+
+def test_verify_resource_access_denied_by_scp_names_the_layer() -> None:
+    results = [
+        {
+            "EvalActionName": "s3:GetObject",
+            "EvalDecision": "implicitDeny",
+            "EvalResourceName": BUCKET_A,
+            "OrganizationsDecisionDetail": {"AllowedByOrganizations": False},
+        }
+    ]
+    proofs = verify_resource_access(ROLE, "s3:GetObject", [BUCKET_A], _RecordingSimulate(results))
+    assert proofs[0].allowed is False
+    assert "denied by SCP" in proofs[0].detail
+
+
+def test_verify_resource_access_denied_by_boundary_names_the_layer() -> None:
+    results = [
+        {
+            "EvalActionName": "s3:GetObject",
+            "EvalDecision": "implicitDeny",
+            "EvalResourceName": BUCKET_A,
+            "PermissionsBoundaryDecisionDetail": {"AllowedByPermissionsBoundary": False},
+        }
+    ]
+    proofs = verify_resource_access(ROLE, "s3:GetObject", [BUCKET_A], _RecordingSimulate(results))
+    assert proofs[0].allowed is False
+    assert "permissions boundary" in proofs[0].detail
+
+
+def test_verify_resource_access_missing_context_is_none() -> None:
+    results = _per_resource("s3:GetObject", {BUCKET_A: "allowed"}, missing={BUCKET_A: ["aws:SourceIp"]})
+    proofs = verify_resource_access(ROLE, "s3:GetObject", [BUCKET_A], _RecordingSimulate(results))
+    assert proofs[0].allowed is None
+    assert "aws:SourceIp" in proofs[0].detail
+
+
+def test_verify_resource_access_simulate_error_never_raises() -> None:
+    sim = _RecordingSimulate(RuntimeError("throttled"))
+    proofs = verify_resource_access(ROLE, "s3:GetObject", [BUCKET_A, BUCKET_B], sim)
+    assert len(proofs) == 2
+    assert all(p.allowed is None for p in proofs)
+    assert all("throttled" in p.detail for p in proofs)
+
+
+def test_verify_resource_access_empty_resources_is_noop() -> None:
+    sim = _RecordingSimulate([])
+    assert verify_resource_access(ROLE, "s3:GetObject", [], sim) == []
+    assert sim.calls == []
+
+
+def test_verify_resource_access_dedupes_preserving_order() -> None:
+    sim = _RecordingSimulate(_per_resource("s3:GetObject", {BUCKET_B: "allowed", BUCKET_A: "allowed"}))
+    proofs = verify_resource_access(ROLE, "s3:GetObject", [BUCKET_B, BUCKET_A, BUCKET_B], sim)
+    assert [p.resource_arn for p in proofs] == [BUCKET_B, BUCKET_A]
+    assert sim.calls[0]["resource_arns"] == [BUCKET_B, BUCKET_A]
+
+
+def test_verify_resource_access_incomplete_resource_is_none() -> None:
+    sim = _RecordingSimulate(_per_resource("s3:GetObject", {BUCKET_A: "allowed"}))
+    proofs = verify_resource_access(ROLE, "s3:GetObject", [BUCKET_A, BUCKET_B], sim)
+    assert proofs[0].allowed is True
+    assert proofs[1].allowed is None
+    assert "Incomplete" in proofs[1].detail
+
+
+def test_verify_resource_access_star_verdict_falls_back() -> None:
+    """A result without EvalResourceName applies to every requested resource."""
+    results = [{"EvalActionName": "s3:GetObject", "EvalDecision": "allowed"}]
+    proofs = verify_resource_access(ROLE, "s3:GetObject", [BUCKET_A, BUCKET_B], _RecordingSimulate(results))
+    assert all(p.allowed is True for p in proofs)
+
+
+def test_verify_resource_access_passes_attacker_context() -> None:
+    sim = _RecordingSimulate(_per_resource("s3:GetObject", {BUCKET_A: "allowed"}))
+    verify_resource_access(ROLE, "s3:GetObject", [BUCKET_A], sim, context_entries=ATTACKER_CONTEXT_ENTRIES)
+    ctx = sim.calls[0]["context_entries"]
+    assert ctx is not None
+    names = {c["ContextKeyName"] for c in ctx}
+    assert names == {"aws:MultiFactorAuthPresent", "aws:SecureTransport"}
+
+
+def test_verify_resource_access_omits_context_when_not_given() -> None:
+    sim = _RecordingSimulate(_per_resource("s3:GetObject", {BUCKET_A: "allowed"}))
+    verify_resource_access(ROLE, "s3:GetObject", [BUCKET_A], sim)
+    assert sim.calls[0]["context_entries"] is None
+
+
+def test_evaluate_broad_path_names_scp_deny() -> None:
+    """The broad escalation check surfaces the denying layer in its detail text."""
+    results = [
+        {
+            "EvalActionName": SAFE_ACTION,
+            "EvalDecision": "implicitDeny",
+            "OrganizationsDecisionDetail": {"AllowedByOrganizations": False},
+        }
+    ]
+    verified, detail = _evaluate_simulation(results, [SAFE_ACTION])
+    assert verified is False
+    assert "denied by SCP" in detail
+
+
+def test_evaluate_broad_path_true_detail_reflects_simulator_scope() -> None:
+    verified, detail = _evaluate_simulation(_results([SAFE_ACTION], "allowed"), [SAFE_ACTION])
+    assert verified is True
+    assert "SCPs" in detail
+    assert "resource-based policies" in detail
+
+
+class _FakeIamCtx:
+    """IAM stub that records simulate_principal_policy kwargs and can paginate."""
+
+    def __init__(self, pages: list[dict[str, Any]]) -> None:
+        self.pages = pages
+        self.calls: list[dict[str, Any]] = []
+
+    def simulate_principal_policy(self, **kwargs: Any) -> dict[str, Any]:
+        self.calls.append(dict(kwargs))
+        return self.pages[len(self.calls) - 1]
+
+
+def test_make_simulate_fn_passes_resource_arns_and_context() -> None:
+    iam = _FakeIamCtx([{"EvaluationResults": _per_resource("s3:GetObject", {BUCKET_A: "allowed"})}])
+    fn = make_simulate_fn(_FakeProvider(iam))  # type: ignore[arg-type]
+    fn(ROLE, ["s3:GetObject"], resource_arns=[BUCKET_A], context_entries=ATTACKER_CONTEXT_ENTRIES)
+    call = iam.calls[0]
+    assert call["PolicySourceArn"] == ROLE
+    assert call["ActionNames"] == ["s3:GetObject"]
+    assert call["ResourceArns"] == [BUCKET_A]
+    assert call["ContextEntries"] == ATTACKER_CONTEXT_ENTRIES
+    assert "Marker" not in call
+
+
+def test_make_simulate_fn_broad_call_omits_optional_params() -> None:
+    iam = _FakeIamCtx([{"EvaluationResults": _results([SAFE_ACTION], "allowed")}])
+    fn = make_simulate_fn(_FakeProvider(iam))  # type: ignore[arg-type]
+    fn(ROLE, [SAFE_ACTION])
+    assert set(iam.calls[0].keys()) == {"PolicySourceArn", "ActionNames"}
+
+
+def test_make_simulate_fn_follows_marker_pagination() -> None:
+    page1 = {
+        "EvaluationResults": _per_resource("s3:GetObject", {BUCKET_A: "allowed"}),
+        "IsTruncated": True,
+        "Marker": "m1",
+    }
+    page2 = {"EvaluationResults": _per_resource("s3:GetObject", {BUCKET_B: "implicitDeny"}), "IsTruncated": False}
+    iam = _FakeIamCtx([page1, page2])
+    fn = make_simulate_fn(_FakeProvider(iam))  # type: ignore[arg-type]
+    res = fn(ROLE, ["s3:GetObject"], resource_arns=[BUCKET_A, BUCKET_B])
+    assert [r["EvalResourceName"] for r in res] == [BUCKET_A, BUCKET_B]
+    assert len(iam.calls) == 2
+    assert iam.calls[1]["Marker"] == "m1"

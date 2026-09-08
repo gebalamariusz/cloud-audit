@@ -10,7 +10,9 @@ network-isolation bypass / egress exfiltration, and related issues in 2026.
 cloud-audit is the first OSS scanner with dedicated AgentCore checks. All checks
 are read-only (``bedrock-agentcore-control`` list/get) with no per-call charge.
 AgentCore is regional and not present in every region; regions/accounts without
-the service are skipped silently.
+the service are skipped silently. An *access denial* is different: the service may
+well be there and misconfigured, the scanner just cannot see it. Those are recorded
+as ``CheckResult.coverage_gaps`` so a pass with gaps never reads as a clean pass.
 
 Field names, operations and enum values used here were verified against the live
 boto3 service model (boto3 1.42.x) - not assumed.
@@ -73,6 +75,29 @@ def _is_unavailable(exc: Exception) -> bool:
     return "not implemented" in msg or "not supported" in msg
 
 
+_ACCESS_DENIED_CODES = {"AccessDeniedException", "AccessDenied", "UnauthorizedOperation"}
+
+
+def _skip_or_gap(result: CheckResult, region: str, exc: Exception) -> bool:
+    """Decide whether to skip this region/resource, recording a coverage gap on access denial.
+
+    Returns ``True`` when the caller should ``continue`` (service absent, unsupported
+    or forbidden here). When the reason is an access denial for the scanner's own
+    credentials, the region is appended to ``result.coverage_gaps`` first: the
+    check did not fail, but it also did not assess anything there. Any other error
+    propagates (``False``) so it surfaces as ``result.error``.
+    """
+    if not _is_unavailable(exc):
+        return False
+    code = getattr(exc, "response", {}).get("Error", {}).get("Code", "")
+    if code in _ACCESS_DENIED_CODES:
+        op = getattr(exc, "operation_name", None) or _SERVICE
+        gap = f"{region}: {op} denied ({code}) - AgentCore not assessed in this region"
+        if gap not in result.coverage_gaps:
+            result.coverage_gaps.append(gap)
+    return True
+
+
 def _paginate(client: Any, method: str, result_key: str) -> list[dict[str, Any]]:
     """Collect all items from a paginated list operation."""
     items: list[dict[str, Any]] = []
@@ -96,7 +121,7 @@ def check_code_interpreter_public_network(provider: AWSProvider) -> CheckResult:
                 client = _agentcore_client(provider, region)
                 summaries = _paginate(client, "list_code_interpreters", "codeInterpreterSummaries")
             except Exception as exc:
-                if _is_unavailable(exc):
+                if _skip_or_gap(result, region, exc):
                     continue
                 raise
 
@@ -108,7 +133,7 @@ def check_code_interpreter_public_network(provider: AWSProvider) -> CheckResult:
                 try:
                     detail = client.get_code_interpreter(codeInterpreterId=ci_id)
                 except Exception as exc:
-                    if _is_unavailable(exc):
+                    if _skip_or_gap(result, region, exc):
                         continue
                     raise
 
@@ -173,7 +198,7 @@ def check_runtime_public_network(provider: AWSProvider) -> CheckResult:
                 client = _agentcore_client(provider, region)
                 summaries = _paginate(client, "list_agent_runtimes", "agentRuntimes")
             except Exception as exc:
-                if _is_unavailable(exc):
+                if _skip_or_gap(result, region, exc):
                     continue
                 raise
 
@@ -185,7 +210,7 @@ def check_runtime_public_network(provider: AWSProvider) -> CheckResult:
                 try:
                     detail = client.get_agent_runtime(agentRuntimeId=rt_id)
                 except Exception as exc:
-                    if _is_unavailable(exc):
+                    if _skip_or_gap(result, region, exc):
                         continue
                     raise
 
@@ -244,7 +269,7 @@ def check_runtime_imdsv2(provider: AWSProvider) -> CheckResult:
                 client = _agentcore_client(provider, region)
                 summaries = _paginate(client, "list_agent_runtimes", "agentRuntimes")
             except Exception as exc:
-                if _is_unavailable(exc):
+                if _skip_or_gap(result, region, exc):
                     continue
                 raise
 
@@ -256,7 +281,7 @@ def check_runtime_imdsv2(provider: AWSProvider) -> CheckResult:
                 try:
                     detail = client.get_agent_runtime(agentRuntimeId=rt_id)
                 except Exception as exc:
-                    if _is_unavailable(exc):
+                    if _skip_or_gap(result, region, exc):
                         continue
                     raise
 
@@ -311,7 +336,7 @@ def check_memory_encryption(provider: AWSProvider) -> CheckResult:
                 client = _agentcore_client(provider, region)
                 summaries = _paginate(client, "list_memories", "memories")
             except Exception as exc:
-                if _is_unavailable(exc):
+                if _skip_or_gap(result, region, exc):
                     continue
                 raise
 
@@ -323,7 +348,7 @@ def check_memory_encryption(provider: AWSProvider) -> CheckResult:
                 try:
                     memory = client.get_memory(memoryId=mem_id).get("memory", {})
                 except Exception as exc:
-                    if _is_unavailable(exc):
+                    if _skip_or_gap(result, region, exc):
                         continue
                     raise
 
@@ -378,7 +403,7 @@ def check_gateway_authorizer(provider: AWSProvider) -> CheckResult:
                 client = _agentcore_client(provider, region)
                 summaries = _paginate(client, "list_gateways", "items")
             except Exception as exc:
-                if _is_unavailable(exc):
+                if _skip_or_gap(result, region, exc):
                     continue
                 raise
 
@@ -390,7 +415,7 @@ def check_gateway_authorizer(provider: AWSProvider) -> CheckResult:
                 try:
                     detail = client.get_gateway(gatewayIdentifier=gw_id)
                 except Exception as exc:
-                    if _is_unavailable(exc):
+                    if _skip_or_gap(result, region, exc):
                         continue
                     raise
 
@@ -443,7 +468,7 @@ def check_gateway_policy_engine(provider: AWSProvider) -> CheckResult:
                 client = _agentcore_client(provider, region)
                 summaries = _paginate(client, "list_gateways", "items")
             except Exception as exc:
-                if _is_unavailable(exc):
+                if _skip_or_gap(result, region, exc):
                     continue
                 raise
 
@@ -455,7 +480,7 @@ def check_gateway_policy_engine(provider: AWSProvider) -> CheckResult:
                 try:
                     detail = client.get_gateway(gatewayIdentifier=gw_id)
                 except Exception as exc:
-                    if _is_unavailable(exc):
+                    if _skip_or_gap(result, region, exc):
                         continue
                     raise
 

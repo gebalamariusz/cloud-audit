@@ -285,6 +285,34 @@ def list_checks() -> str:
     return json.dumps(checks_list, indent=2)
 
 
+@mcp.tool()
+def get_agent_blast(agent: str = "") -> str:
+    """What can a hijacked AI agent reach in this AWS account?
+
+    For every Bedrock Agent, AgentCore runtime, gateway or sandbox found by the
+    last scan (or the one matching ``agent`` by name, id or ARN substring),
+    returns a Markdown report under two threat models: identity takeover (the
+    attacker holds the agent role's credentials) and behaviour takeover (prompt
+    injection steering the agent's tools, bounded by the tools' execution
+    roles), with data, secret, lateral and code-execution reach and OWASP
+    Agentic / MITRE ATLAS tags. Computed from the saved scan, no AWS calls.
+    """
+    from cloud_audit.agent_blast import compute_agent_blast, find_agent, to_markdown
+    from cloud_audit.models import ScanReport
+
+    report = ScanReport.model_validate(_report_or_error())
+    if not report.agents:
+        gaps = report.agent_inventory_gaps
+        if gaps:
+            return "No AI agents in the last scan, but the inventory was denied a read: " + "; ".join(gaps)
+        return "No AI agents (Bedrock Agents / AgentCore) in the last scan."
+    targets = report.agents if not agent.strip() else find_agent(report, agent)
+    if not targets:
+        names = ", ".join(sorted({a.name for a in report.agents}))
+        return f"No agent matches '{agent}'. Available: {names}"
+    return "\n\n".join(to_markdown(compute_agent_blast(report, a)) for a in targets)
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------

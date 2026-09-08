@@ -27,9 +27,11 @@ import threading
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from cloud_audit.models import EscalationCategory, EscalationPath, Severity
+from cloud_audit.models import EscalationCategory, EscalationPath, PolicyGrant, Severity
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from cloud_audit.providers.aws.provider import AWSProvider
 
 # ---------------------------------------------------------------------------
@@ -704,3 +706,141 @@ def analyze_escalation(provider: AWSProvider) -> list[EscalationPath]:
         _escalation_cache = paths
 
     return paths
+
+
+# ---------------------------------------------------------------------------
+# Raw policy grants for selected principals (agent-blast data reach)
+# ---------------------------------------------------------------------------
+
+
+def _iter_statements(policy_doc: dict[str, Any] | str) -> list[tuple[str, list[str], bool, list[str], bool, bool]]:
+    """Yield ``(effect, actions, not_action, resources, not_resource, has_condition)`` per statement.
+
+    Unlike ``_extract_actions_from_policy`` this keeps Resource, Condition and the
+    NotAction / NotResource forms, so callers can reason about *what* a permission
+    reaches instead of only *whether* it exists.
+    """
+    doc: dict[str, Any] = json.loads(policy_doc) if isinstance(policy_doc, str) else policy_doc
+    statements = doc.get("Statement", [])
+    if isinstance(statements, dict):
+        statements = [statements]
+    out: list[tuple[str, list[str], bool, list[str], bool, bool]] = []
+    for stmt in statements:
+        if not isinstance(stmt, dict):
+            continue
+        effect = str(stmt.get("Effect", ""))
+        if effect not in ("Allow", "Deny"):
+            continue
+        not_action = "NotAction" in stmt and "Action" not in stmt
+        actions = stmt.get("NotAction" if not_action else "Action", [])
+        if isinstance(actions, str):
+            actions = [actions]
+        not_resource = "NotResource" in stmt and "Resource" not in stmt
+        resources = stmt.get("NotResource" if not_resource else "Resource", ["*"])
+        if isinstance(resources, str):
+            resources = [resources]
+        out.append(
+            (
+                effect,
+                [str(a) for a in actions],
+                not_action,
+                [str(r) for r in resources],
+                not_resource,
+                bool(stmt.get("Condition")),
+            )
+        )
+    return out
+
+
+def _managed_policy_document(policy_arn: str, policies_map: dict[str, Any]) -> dict[str, Any] | None:
+    policy = policies_map.get(policy_arn)
+    if not policy:
+        return None
+    for version in policy.get("PolicyVersionList", []):
+        if version.get("IsDefaultVersion"):
+            doc = version.get("Document", {})
+            return json.loads(doc) if isinstance(doc, str) else dict(doc)
+    return None
+
+
+def _grants_from_document(policy_doc: dict[str, Any] | str, source: str) -> list[PolicyGrant]:
+    grants: list[PolicyGrant] = []
+    for effect, actions, not_action, resources, not_resource, has_condition in _iter_statements(policy_doc):
+        action_values = [f"NotAction:{','.join(actions)}"] if not_action else actions
+        resource_values = [f"NotResource:{','.join(resources)}"] if not_resource else resources
+        for action in action_values:
+            for resource in resource_values:
+                grants.append(
+                    PolicyGrant(
+                        action=action,
+                        resource=resource,
+                        effect=effect,
+                        has_condition=has_condition,
+                        not_action=not_action,
+                        not_resource=not_resource,
+                        source=source,
+                    )
+                )
+    return grants
+
+
+def _grants_for_entity(
+    entity: dict[str, Any],
+    inline_key: str,
+    policies_map: dict[str, Any],
+    source_prefix: str = "",
+) -> list[PolicyGrant]:
+    grants: list[PolicyGrant] = []
+    for inline in entity.get(inline_key, []):
+        name = str(inline.get("PolicyName", "inline"))
+        grants.extend(_grants_from_document(inline.get("PolicyDocument", {}), f"{source_prefix}inline:{name}"))
+    for attached in entity.get("AttachedManagedPolicies", []):
+        arn = str(attached.get("PolicyArn", ""))
+        doc = _managed_policy_document(arn, policies_map)
+        if doc is not None:
+            grants.extend(_grants_from_document(doc, f"{source_prefix}managed:{arn}"))
+    return grants
+
+
+def resolve_principal_grants(
+    auth_details: dict[str, Any], principal_arns: Iterable[str]
+) -> dict[str, list[PolicyGrant]]:
+    """Collect raw policy grants for the given IAM users/roles only.
+
+    Bounded on purpose: agent-blast needs the handful of identities an AI agent
+    acts through, not the whole account. Inline, attached-managed and (for users)
+    group policies are included. Unknown ARNs get an empty list so the caller can
+    tell "no policy data" from "no permissions".
+    """
+    wanted = {arn.lower() for arn in principal_arns if arn}
+    grants: dict[str, list[PolicyGrant]] = {}
+    if not wanted:
+        return grants
+
+    policies_map: dict[str, Any] = {p["Arn"]: p for p in auth_details.get("Policies", []) if "Arn" in p}
+    groups_by_name: dict[str, dict[str, Any]] = {
+        g["GroupName"]: g for g in auth_details.get("GroupDetailList", []) if "GroupName" in g
+    }
+
+    for role in auth_details.get("RoleDetailList", []):
+        arn = str(role.get("Arn", ""))
+        if arn.lower() in wanted:
+            grants[arn] = _grants_for_entity(role, "RolePolicyList", policies_map)
+
+    for user in auth_details.get("UserDetailList", []):
+        arn = str(user.get("Arn", ""))
+        if arn.lower() not in wanted:
+            continue
+        user_grants = _grants_for_entity(user, "UserPolicyList", policies_map)
+        for group_name in user.get("GroupList", []):
+            group = groups_by_name.get(str(group_name))
+            if group:
+                user_grants.extend(_grants_for_entity(group, "GroupPolicyList", policies_map, f"group:{group_name}/"))
+        grants[arn] = user_grants
+
+    # Requested but absent (deleted role, cross-account ARN, service-linked role skipped upstream)
+    present = {k.lower() for k in grants}
+    for arn in principal_arns:
+        if arn and arn.lower() not in present:
+            grants[arn] = []
+    return grants

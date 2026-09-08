@@ -195,6 +195,34 @@ def run_scan(
         if not quiet:
             console.print(f"[yellow]Warning: Escalation-path persistence failed: {e}[/yellow]")
 
+    # AI agent inventory (AWS-only, read-only): Bedrock Agents and AgentCore
+    # identities, tools and data sources. Feeds `agent-blast`; a denied read is a
+    # coverage gap, never a silent "no agents here".
+    try:
+        from cloud_audit.providers.aws.agent_inventory import discover_agents
+        from cloud_audit.providers.aws.provider import AWSProvider
+
+        if isinstance(provider, AWSProvider):
+            agents, agent_gaps = discover_agents(provider)
+            report.agents = agents
+            report.agent_inventory_gaps = agent_gaps
+            report.summary.agents_discovered = len(agents)
+            report.summary.coverage_gaps += len(agent_gaps)
+            if agents and not quiet:
+                tool_count = sum(len(a.tools) for a in agents)
+                identity_count = len(
+                    {arn for a in agents for arn in a.principal_arns}
+                    | {t.execution_role_arn for a in agents for t in a.tools if t.execution_role_arn}
+                )
+                console.print(
+                    f"[bold]AI agents discovered: {len(agents)}[/bold] "
+                    f"({tool_count} tool(s), {identity_count} IAM identities). "
+                    f"Run [cyan]cloud-audit agent-blast[/cyan]."
+                )
+    except Exception as e:
+        if not quiet:
+            console.print(f"[yellow]Warning: AI agent inventory failed: {e}[/yellow]")
+
     # Proof Mode (opt-in): cross-check escalation paths against the read-only IAM
     # policy simulator. Annotates each path with verified + evidence.
     if verify and report.escalation_paths:
@@ -236,6 +264,22 @@ def run_scan(
             if isinstance(provider, AWSProvider):
                 auth_details = get_authorization_details(provider)
                 trust_graph = build_assume_role_graph(auth_details)
+                # Raw policy grants for AI agent identities (agent-blast data reach).
+                # Same auth details, no extra API call, bounded to agent principals.
+                if report.agents:
+                    try:
+                        from cloud_audit.providers.aws.agent_inventory import principal_arns_for
+                        from cloud_audit.providers.aws.iam_analyzer import resolve_principal_grants
+
+                        wanted: set[str] = set()
+                        for agent in report.agents:
+                            own_roles, tool_roles = principal_arns_for(agent)
+                            wanted.update(own_roles)
+                            wanted.update(tool_roles)
+                        report.principal_grants = resolve_principal_grants(auth_details, sorted(wanted))
+                    except Exception as e:
+                        if not quiet:
+                            console.print(f"[yellow]Warning: agent policy grants unavailable: {e}[/yellow]")
                 # resolve_principals fidelity is used for ARN-side links; if it
                 # fails, the graph still works on lighter data.
                 _ = resolve_principals(auth_details)

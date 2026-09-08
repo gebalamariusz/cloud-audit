@@ -425,9 +425,16 @@ def _arn_role_name(arn: str) -> str:
 
 
 def _short_label(resource_id: str, max_len: int = 32) -> str:
-    """Shorten a long ARN or id for compact display."""
+    """Shorten a long ARN or id for compact display.
+
+    IAM principals keep their name (``role/ci-deploy``) instead of a truncated
+    account prefix, which is the part nobody needs to read.
+    """
     if len(resource_id) <= max_len:
         return resource_id
+    match = re.match(r"^arn:aws:iam::\d+:(role|user)/(.+)$", resource_id)
+    if match and len(match.group(2)) + len(match.group(1)) + 1 <= 64:
+        return f"{match.group(1)}/{match.group(2)}"
     head = resource_id[: max_len - 4]
     return f"{head}..."
 
@@ -1171,7 +1178,23 @@ def to_tree(result: BlastRadiusResult) -> Tree:
 
     root = Tree(_format_node_line(seed, edge=None))
     _attach_children(root, seed.id, children)
+    disable_emoji(root)
     return root
+
+
+def disable_emoji(tree: Tree) -> None:
+    """Render tree labels with Rich markup but without emoji shortcodes.
+
+    AWS ARNs contain ``:secret:``, ``:key:`` and similar segments that Rich would
+    otherwise replace with emoji - unreadable at best, and a ``UnicodeEncodeError``
+    on Windows consoles that cannot encode them.
+    """
+    from rich.text import Text
+
+    if isinstance(tree.label, str):
+        tree.label = Text.from_markup(tree.label, emoji=False)
+    for child in tree.children:
+        disable_emoji(child)
 
 
 def _format_node_line(node: BlastNode, edge: BlastEdge | None) -> str:

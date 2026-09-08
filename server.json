@@ -8,12 +8,12 @@
     "url": "https://github.com/gebalamariusz/cloud-audit",
     "source": "github"
   },
-  "version": "2.3.0",
+  "version": "2.5.0",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "cloud-audit",
-      "version": "2.3.0",
+      "version": "2.5.0",
       "transport": {
         "type": "stdio"
       },

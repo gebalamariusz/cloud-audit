@@ -58,10 +58,14 @@ nav:
     - Quick Start: getting-started/quick-start.md
     - Demo Mode: getting-started/demo.md
   - Features:
+    - agent-blast (AI agents): features/agent-blast.md
     - Blast Radius: features/blast-radius.md
     - Attack Chains: features/attack-chains.md
     - IAM Privilege Escalation: features/iam-escalation.md
     - Threat Feed: features/threat-feed.md
+    - Data Perimeter: features/data-perimeter.md
+    - Proof Mode: features/proof-mode.md
+    - AgentCore Security: features/agentcore.md
     - What-If Simulator: features/simulate.md
     - Security Posture Trend: features/trend.md
     - AI-SPM (Bedrock/SageMaker): features/ai-spm.md
@@ -92,6 +96,5 @@ nav:
     - HTML Report: reports/html.md
     - JSON & SARIF: reports/json-sarif.md
     - Markdown: reports/markdown.md
-  - Alternatives: alternatives.md
   - Contributing: contributing.md
   - Changelog: changelog.md

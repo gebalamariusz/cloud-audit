@@ -161,3 +161,42 @@ class TestMcpTools:
         assert "name" in result[0]
         assert "service" in result[0]
         assert "category" in result[0]
+
+
+class TestAgentBlastTool:
+    """get_agent_blast composes the agent-blast engine over the cached report."""
+
+    def test_no_report_raises(self) -> None:
+        import cloud_audit.mcp_server as mcp_mod
+
+        mcp_mod._last_report_json = None
+        with pytest.raises(ValueError, match="No scan results"):
+            mcp_mod.get_agent_blast()
+
+    def test_no_agents_in_report(self) -> None:
+        import cloud_audit.mcp_server as mcp_mod
+
+        mcp_mod._last_report_json = _make_report_json()
+        assert "No AI agents" in mcp_mod.get_agent_blast()
+
+    def test_all_agents_markdown(self) -> None:
+        import cloud_audit.mcp_server as mcp_mod
+        from cloud_audit.demo_data import build_demo_report
+
+        mcp_mod._last_report_json = json.loads(build_demo_report().model_dump_json())
+        out = mcp_mod.get_agent_blast()
+        assert "# agent-blast: support-bot" in out
+        assert "# agent-blast: tools-gw" in out
+        assert "PassRole+Lambda" in out
+
+    def test_agent_filter_and_unknown(self) -> None:
+        import cloud_audit.mcp_server as mcp_mod
+        from cloud_audit.demo_data import build_demo_report
+
+        mcp_mod._last_report_json = json.loads(build_demo_report().model_dump_json())
+        only = mcp_mod.get_agent_blast("planner")
+        assert "# agent-blast: planner" in only
+        assert "support-bot" not in only.split("\n")[0]
+        missing = mcp_mod.get_agent_blast("nope")
+        assert missing.startswith("No agent matches")
+        assert "support-bot" in missing

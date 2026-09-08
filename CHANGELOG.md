@@ -7,6 +7,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-09-08
+
+### Added
+
+- **`cloud-audit agent-blast`** - what can a hijacked AI agent reach in your
+  AWS account, and can you prove it? For every Bedrock Agent, AgentCore runtime,
+  gateway, code interpreter and browser discovered by `scan`, answers under two
+  threat models: *identity takeover* (the attacker holds the credentials of a
+  role the agent runs as: full role, escalation methods, AssumeRole hops) and
+  *behaviour takeover* (prompt injection steering the agent's tools, bounded by
+  the tools' own execution roles). Reach covers S3, Secrets Manager, SSM,
+  DynamoDB, RDS Data API, KMS, SQS, Lambda invoke/code, AssumeRole and Bedrock
+  model invocation; the agent's own knowledge-base buckets are concrete targets
+  even under wildcard grants (write access there is flagged as RAG poisoning).
+  Findings carry OWASP Top 10 for Agentic Applications (2026) and MITRE ATLAS
+  (v2026.08) identifiers. Output: tree, JSON, Markdown. Pure in-memory analysis
+  of the saved scan. `--verify` asks the read-only IAM policy simulator about
+  every concrete (principal, action, resource) and every escalation path.
+- **AI agent identity inventory** - `scan` now records `agents` on the report:
+  Bedrock Agents (resource role, action groups at DRAFT version resolved to the
+  Lambda execution role, knowledge bases resolved to S3 data-source buckets)
+  and AgentCore (runtime role and network mode, gateway role with authorizer,
+  policy engine and targets, code interpreter and browser execution roles).
+  Read-only list/get calls, no charge. A denied read is recorded as a coverage
+  gap, never as "no agents here".
+- **Policy grants for agent identities** - `report.principal_grants` keeps the
+  raw `(action, resource, effect, condition-flag, source)` statements for agent
+  roles and their tools' roles only. Conditions are flagged, not evaluated; the
+  IAM policy simulator decides.
+- **Coverage gaps** - `CheckResult.coverage_gaps` and `summary.coverage_gaps`.
+  AgentCore checks now record an `AccessDenied` as "not assessed in this
+  region" (console, JSON, Markdown) instead of silently skipping the region.
+  A pass with gaps is not a clean pass.
+- **Proof Mode per resource** - `proof.verify_resource_access` simulates one
+  action against concrete resource ARNs with optional context keys
+  (`ATTACKER_CONTEXT_ENTRIES`: no MFA on the session, TLS transport), reports
+  which policy layer denied (SCP, permissions boundary) and follows result
+  pagination.
+- **Sample scan through the real engines** - `cloud-audit demo` now renders an
+  invented account through the actual correlation, root-cause, breach-cost and
+  security-graph engines instead of printing canned text; `demo --save FILE`
+  writes it as a scan report so `blast-radius`, `agent-blast`, `simulate`,
+  `exposure` and `diff` can be tried offline, and `agent-blast --demo` needs no
+  file at all. The sample includes a Bedrock Agent, an AgentCore runtime, a
+  gateway with Lambda and remote-MCP targets and a code interpreter.
+- **MCP tool `get_agent_blast`** - the agent-blast report (Markdown) for every
+  agent in the last scan, or one agent by name, id or ARN substring.
+
+### Fixed
+
+- `simulate` reported relationship-based chains (`AC-01` internet-exposed admin
+  instance, `AC-07` OIDC to admin) as broken by any fix, because re-detection
+  from findings alone cannot see EC2-to-role and OIDC-to-policy relationships a
+  saved scan does not carry. A chain now survives a simulated fix unless one of
+  its own findings was fixed, and the remaining risk exposure is priced
+  accordingly.
+- `blast-radius` (tree output) crashed on Windows consoles with `cp1250`
+  encoding, and rendered emoji elsewhere, when a node label contained an ARN
+  segment such as `:secret:`: Rich interpreted it as an emoji shortcode.
+  Tree labels are now rendered with emoji disabled. `agent-blast` uses the same
+  renderer.
+
+### Changed
+
+- Proof Mode documentation now reflects the IAM policy simulator as of
+  2026-07-30: the attached permissions boundary and the organization's SCPs
+  (including their condition keys and resource scoping) are evaluated; RCPs,
+  VPC endpoint policies, role chaining and resource-based policies for IAM
+  roles are not. The "verified" detail text says so.
+- `blast-radius` labels IAM principals as `role/<name>` / `user/<name>` instead
+  of a truncated account prefix.
+- README rewritten around `agent-blast`, with every sample block taken from the
+  commands' real output on the built-in sample scan.
+
 ## [2.4.0] - 2026-06-30
 
 ### Added

@@ -1,6 +1,6 @@
 # Roadmap
 
-> Current version: **v2.3.0** (May 2026)
+> Current version: **v2.5.0** (September 2026)
 
 ## Completed
 
@@ -62,7 +62,7 @@
 - **What-If Remediation Simulator** -- `cloud-audit simulate --fix aws-vpc-002` shows impact on score, chains, risk before changing anything in AWS
 - **Root Cause Grouping** -- "fix 4 things, break 22 chains" prioritization. Groups findings by root cause and ranks by chain-breaking impact.
 - **Security Posture Trend** -- `cloud-audit trend` tracks health score, chains, and risk over time. History auto-saved after each scan.
-- **AI-SPM (Bedrock + SageMaker)** -- 5 checks, 3 attack chains (model theft, LLMjacking, data poisoning). First open-source AI-SPM scanner.
+- **AI-SPM (Bedrock + SageMaker)** -- 5 checks, 3 attack chains (model theft, LLMjacking, data poisoning).
 - **Quick Wins** -- CLI section showing LOW-effort fixes that break CRITICAL chains
 - 6 new attack chain rules (AC-34 through AC-39)
 - Compliance Beta labels (CIS + SOC2 stable, 4 others beta)
@@ -77,7 +77,28 @@
 
 - **Blast Radius CLI** (MVP) -- `cloud-audit blast-radius --resource <id>` walks outward from a single AWS resource (EC2, IAM Role/User, Lambda, S3 bucket, secret) and reports what an attacker could reach if that resource were compromised. Tree, JSON (BlastRadiusGraph v1.0 schema), Mermaid, and Markdown output. Pure in-memory, no AWS calls at blast-radius time. Built on the existing IAM trust graph + escalation catalog. 26 new tests, 812 total. Includes a full pre-release security pass (SEC-001 through SEC-009 plus F-S2-01 through F-S2-06 hardening — URL scheme allowlisting in HTML reports, symlink-safe writes, markdown injection escape, cycle dedup in BFS).
 
-### v3.0.0 -- Security Graph & Exposure Analysis (target: June 2026)
+### v2.4.0 -- Data Perimeter, Proof Mode, AgentCore (shipped June 2026)
+- Data Perimeter checks (`aws-dp-001..005`): confused deputy and cross-organization exposure on resource policies
+- Proof Mode (`scan --verify`): IAM policy-simulator confirmation of escalation paths
+- Bedrock AgentCore checks (`aws-agc-001..006`)
+
+### v2.5.0 -- agent-blast (shipped September 2026)
+- AI agent identity inventory: Bedrock Agents (resource role, action groups, knowledge bases) and AgentCore (runtime, gateway targets, code interpreter, browser)
+- `cloud-audit agent-blast`: identity takeover vs behaviour takeover, data/secret/lateral/code reach, RAG poisoning on knowledge-base buckets, OWASP Agentic and MITRE ATLAS tags, `--verify` per resource
+- Per-resource Proof Mode with attacker context; SCP and permissions-boundary decisions surfaced
+- Coverage gaps: denied reads reported as "not assessed"
+- `demo --save` and `agent-blast --demo`: the sample scan through the real engines
+- MCP tool `get_agent_blast`
+
+### Next -- after the v2.5 signal
+The direction depends on how agent-blast is received. Candidates, in order:
+- **Proof of pivot** (opt-in): actually assume the agent's role to prove the lateral hop, with CloudTrail evidence
+- **What-If for agents**: `PolicyExclusionList` simulation once the pinned botocore supports it
+- **Agent drift**: diff an agent's reach between two scans (`diff` already exists for findings)
+- **Brake**: Terraform deny statements with rollback for the reaches you decide to cut
+- AgentCore Gateway to runtime binding via an explicit mapping file; tool-parameter adapters for a tighter bound than the tool role
+
+### v3.0.0 -- Security Graph & Exposure Analysis (target: after the v2.5 signal)
 
 **1. Security Graph + Effective Exposure Score**
 In-memory graph (networkx) modeling all resource relationships: VPC routing, subnets, security groups, EC2 instances, IAM roles, policies, S3 buckets, RDS instances. BFS/DFS from internet nodes to high-value targets. Per-resource "effective exposure score" combining network reachability + identity privilege + data sensitivity. Output: "3 paths from internet to production database."
